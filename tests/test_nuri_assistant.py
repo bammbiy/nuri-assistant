@@ -1,22 +1,29 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
-from src.nf_file_engine import (
+from src.nuri_assistant import (
     DEFAULT_RULE,
     HistoryStore,
+    ProductCandidate,
+    ShoppingAdvisorError,
     RenameInput,
     WorkProfile,
     apply_batch_rename,
     apply_rename,
+    advise_purchase,
     build_file_name,
     export_preview_csv,
     infer_metadata,
+    interpret_file_command,
     load_profiles,
     preview_batch,
     preview_rename,
+    evaluate_purchase,
     scan_files,
     save_profile,
     undo_last,
@@ -155,6 +162,75 @@ class RenameEngineTest(unittest.TestCase):
             self.assertEqual(profiles["daily"].media, "ja00")
             self.assertEqual(profiles["daily"].rule, "{MEDIA}-{DATE}-{PAGE}")
             self.assertTrue(profiles["daily"].recursive)
+
+    def test_file_assistant_interprets_korean_command(self) -> None:
+        plan = interpret_file_command("2026-07-15 ja00 12부터 하위 폴더까지 정리해줘")
+
+        self.assertEqual(plan.date, "20260715")
+        self.assertEqual(plan.media, "ja00")
+        self.assertEqual(plan.page, "012")
+        self.assertTrue(plan.recursive)
+        self.assertFalse(plan.needs_media)
+
+    def test_file_assistant_requires_media_code(self) -> None:
+        plan = interpret_file_command("20260715 문서 정리해줘")
+
+        self.assertTrue(plan.needs_media)
+
+    def test_purchase_evaluation_ranks_value_and_marks_evidence(self) -> None:
+        target = ProductCandidate(
+            name="Target",
+            price=100_000,
+            rating=4.2,
+            review_count=40,
+            warranty_months=12,
+            suitability=3,
+            is_target=True,
+        )
+        alternative = ProductCandidate(
+            name="Alternative",
+            price=80_000,
+            rating=4.6,
+            review_count=1_000,
+            warranty_months=24,
+            suitability=4,
+        )
+
+        assessments = evaluate_purchase([target, alternative])
+
+        self.assertEqual(assessments[0].product.name, "Alternative")
+        self.assertGreater(assessments[0].score, assessments[1].score)
+        self.assertEqual(assessments[0].evidence_level, "high")
+
+    def test_ai_advisor_requires_key_before_network_request(self) -> None:
+        with patch.dict("src.nuri_assistant.shopping.ai_advisor.os.environ", {}, clear=True):
+            with patch("src.nuri_assistant.shopping.ai_advisor.urlopen") as urlopen:
+                with self.assertRaises(ShoppingAdvisorError):
+                    advise_purchase("wireless headphones", [], api_key="")
+
+        urlopen.assert_not_called()
+
+    def test_ai_advisor_uses_web_search_and_disables_response_storage(self) -> None:
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self) -> bytes:
+                return b'{"output":[{"content":[{"type":"output_text","text":"AI recommendation"}]}]}'
+
+        product = ProductCandidate(name="Headphones", price=100_000, is_target=True)
+        with patch("src.nuri_assistant.shopping.ai_advisor.urlopen", return_value=FakeResponse()) as urlopen:
+            advice = advise_purchase("Headphones comparison", [product], api_key="test-key")
+
+        request = urlopen.call_args.args[0]
+        payload = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(advice.text, "AI recommendation")
+        self.assertTrue(advice.used_web_search)
+        self.assertFalse(payload["store"])
+        self.assertEqual(payload["tools"], [{"type": "web_search"}])
 
 
 if __name__ == "__main__":

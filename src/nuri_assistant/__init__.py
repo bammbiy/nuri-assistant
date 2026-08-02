@@ -18,22 +18,32 @@ from .core import (
     undo_last,
     undo_last_batch,
 )
+from .assistant import FileAssistantPlan, interpret_file_command
 from .metadata import infer_metadata
+from .shopping import AIAdvice, ProductCandidate, PurchaseAssessment, ShoppingAdvisorError, advise_purchase, evaluate_purchase
 from .storage import HistoryStore, WorkProfile, load_profiles, save_profile
 
 __all__ = [
     "DEFAULT_EXTENSIONS",
     "DEFAULT_RULE",
+    "AIAdvice",
+    "FileAssistantPlan",
     "HistoryStore",
     "RenameError",
     "RenameInput",
     "RenamePreview",
+    "ProductCandidate",
+    "PurchaseAssessment",
+    "ShoppingAdvisorError",
     "WorkProfile",
     "apply_batch_rename",
     "apply_rename",
+    "advise_purchase",
     "build_file_name",
     "export_preview_csv",
+    "evaluate_purchase",
     "infer_metadata",
+    "interpret_file_command",
     "load_profiles",
     "normalize_date",
     "normalize_media",

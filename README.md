@@ -1,4 +1,28 @@
-# NF File Engine
+# Nuri Assistant
+
+## Assistant Mode
+
+Nuri Assistant combines file organization and purchase decisions in one review-first desktop workflow.
+
+- File assistant: choose a folder and type a request such as `20260715 ja00 1부터 하위 폴더까지 정리해줘`. The app extracts the date, media code, page number, naming order, and recursive option, then shows a rename preview before any files change.
+- Purchase assistant: add the product you are considering plus alternatives. It ranks products from the price, rating, review count, warranty, and your fit score. The result only uses the facts entered in the app; it does not claim live prices, reviews, or market research.
+
+The built-in score works offline from the facts you enter. The AI Research panel adds live web research when an OpenAI API key is supplied, while keeping the same flow: collect sources, show the evidence, recommend, and leave the final purchase decision to you.
+
+### AI shopping research
+
+The Purchase Assistant includes an `AI Research` panel. Enter a product name or product link, optionally add your own candidates, then enter an OpenAI API key for the current session and press `AI Research`.
+
+- The key is never written to a project file or profile.
+- The request sends `store: false` and asks the model to research current web evidence before recommending a purchase.
+- The response should be treated as research support: always recheck the current price, seller, warranty, and delivery conditions before buying.
+
+You can also set the key once for the current Windows terminal before starting the app:
+
+```powershell
+$env:OPENAI_API_KEY = "your_api_key"
+python src/run_nuri.py
+```
 
 반복되는 문서 파일명 정리 작업을 빠르고 안전하게 처리하기 위한 데스크톱 파일 관리 도구입니다.
 
@@ -59,8 +83,8 @@ ja00-20260628-001.pdf
 Python 3.11 이상을 권장합니다.
 
 ```bash
-cd nf-file-engine
-python src/app.py
+cd nuri-assistant
+python src/run_nuri.py
 ```
 
 ## 실무 사용 흐름
@@ -87,7 +111,7 @@ python src/app.py
 - 파일명 규칙
 - 하위폴더 포함 여부
 
-프로필 파일은 사용자 홈의 `.nf-file-engine/profiles.json`에 저장됩니다.
+프로필 파일은 사용자 홈의 `.nuri-assistant/profiles.json`에 저장됩니다.
 
 ## 테스트
 
@@ -99,11 +123,11 @@ python -m unittest discover -s tests
 ## 프로젝트 구조
 
 ```text
-nf-file-engine/
+nuri-assistant/
 ├── README.md
 ├── src/
-│   ├── app.py
-│   └── nf_file_engine/
+│   ├── run_nuri.py
+│   └── nuri_assistant/
 │       ├── __init__.py
 │       ├── core/
 │       │   ├── export.py
@@ -121,7 +145,7 @@ nf-file-engine/
 │       └── ui/
 │           └── desktop.py
 └── tests/
-    └── test_nf_file_engine.py
+    └── test_nuri_assistant.py
 ```
 
 ## 설계 방향
@@ -168,7 +192,7 @@ nf-file-engine/
 
 ### 5단계: NewsFlow
 
-NF File Engine, Folder Watcher, OCR Inspector, Upload Monitor를 하나의 문서 처리 파이프라인으로 통합합니다.
+Nuri Assistant, Folder Watcher, OCR Inspector, Upload Monitor를 하나의 문서 처리 파이프라인으로 통합합니다.
 
 ## 포트폴리오 포인트
 

@@ -4,7 +4,8 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from nf_file_engine import (
+from .assistant import AssistantWindow
+from nuri_assistant import (
     DEFAULT_RULE,
     HistoryStore,
     RenameInput,
@@ -21,7 +22,7 @@ from nf_file_engine import (
 )
 
 
-APP_DIR = Path.home() / ".nf-file-engine"
+APP_DIR = Path.home() / ".nuri-assistant"
 DB_PATH = APP_DIR / "history.sqlite3"
 PROFILES_PATH = APP_DIR / "profiles.json"
 RULE_PRESETS = {
@@ -33,10 +34,10 @@ RULE_PRESETS = {
 STATUS_FILTERS = ("전체", "ready", "conflict", "error", "skip")
 
 
-class NFFileEngineApp(tk.Tk):
+class NuriAssistantApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("NF File Engine")
+        self.title("Nuri Assistant")
         self.geometry("1180x760")
         self.minsize(1040, 640)
         self.rowconfigure(4, weight=1)
@@ -60,6 +61,9 @@ class NFFileEngineApp(tk.Tk):
         self._build_ui()
         self.search_var.trace_add("write", lambda *_: self.refresh_preview())
         self.status_filter_var.trace_add("write", lambda *_: self.refresh_preview())
+
+    def open_assistant(self) -> None:
+        AssistantWindow(self, self.history)
 
     def _build_ui(self) -> None:
         self._build_source_bar()
@@ -167,6 +171,7 @@ class NFFileEngineApp(tk.Tk):
         bottom = ttk.Frame(self, padding=(12, 0, 12, 12))
         bottom.grid(row=5, column=0, sticky="ew")
         bottom.columnconfigure(0, weight=1)
+        ttk.Button(bottom, text="Assistant", command=self.open_assistant).grid(row=0, column=2, padx=(6, 0))
         ttk.Label(bottom, text="검수 후 변경 실행을 누르세요. CSV 저장은 작업 전 공유/승인용으로 사용할 수 있습니다.").grid(row=0, column=0, sticky="w")
         ttk.Button(bottom, text="히스토리 보기", command=self.show_history).grid(row=0, column=1)
 
@@ -178,7 +183,7 @@ class NFFileEngineApp(tk.Tk):
         name = self.profile_var.get()
         profile = self.profiles.get(name)
         if profile is None:
-            messagebox.showinfo("NF File Engine", "불러올 프로필을 선택하세요.")
+            messagebox.showinfo("Nuri Assistant", "불러올 프로필을 선택하세요.")
             return
         self.date_var.set(profile.date)
         self.media_var.set(profile.media)
@@ -249,7 +254,7 @@ class NFFileEngineApp(tk.Tk):
     def remove_selected(self) -> None:
         selected = set(self.table.selection())
         if not selected:
-            messagebox.showinfo("NF File Engine", "제거할 항목을 선택하세요.")
+            messagebox.showinfo("Nuri Assistant", "제거할 항목을 선택하세요.")
             return
         paths_to_remove = {
             Path(str(self.table.item(item_id, "values")[0]))
@@ -322,7 +327,7 @@ class NFFileEngineApp(tk.Tk):
     def export_preview(self) -> None:
         previews = self._previews()
         if not previews:
-            messagebox.showinfo("NF File Engine", "저장할 미리보기가 없습니다.")
+            messagebox.showinfo("Nuri Assistant", "저장할 미리보기가 없습니다.")
             return
         output = filedialog.asksaveasfilename(
             title="미리보기 CSV 저장",
@@ -340,7 +345,7 @@ class NFFileEngineApp(tk.Tk):
         ready = [preview for preview in previews if preview.status == "ready"]
         blocked = [preview for preview in previews if preview.status in {"conflict", "error"}]
         if not ready:
-            messagebox.showinfo("NF File Engine", "변경 가능한 파일이 없습니다.")
+            messagebox.showinfo("Nuri Assistant", "변경 가능한 파일이 없습니다.")
             return
         if blocked:
             proceed = messagebox.askyesno(
@@ -399,4 +404,4 @@ class NFFileEngineApp(tk.Tk):
 
 
 def run() -> None:
-    NFFileEngineApp().mainloop()
+    NuriAssistantApp().mainloop()

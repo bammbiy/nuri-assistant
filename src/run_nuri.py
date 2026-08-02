@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from nf_file_engine.ui.desktop import run
+from nuri_assistant.ui.desktop import run
 
 
 if __name__ == "__main__":
