@@ -7,7 +7,26 @@ Nuri Assistant combines file organization and purchase decisions in one review-f
 - File assistant: choose a folder and type a request such as `20260715 ja00 1부터 하위 폴더까지 정리해줘`. The app extracts the date, media code, page number, naming order, and recursive option, then shows a rename preview before any files change.
 - Purchase assistant: add the product you are considering plus alternatives. It ranks products from the price, rating, review count, warranty, and your fit score. The result only uses the facts entered in the app; it does not claim live prices, reviews, or market research.
 
+<<<<<<< HEAD
+The built-in score works offline from the facts you enter. The AI Research panel adds live web research when an OpenAI API key is supplied, while keeping the same flow: collect sources, show the evidence, recommend, and leave the final purchase decision to you.
+
+### AI shopping research
+
+The Purchase Assistant includes an `AI Research` panel. Enter a product name or product link, optionally add your own candidates, then enter an OpenAI API key for the current session and press `AI Research`.
+
+- The key is never written to a project file or profile.
+- The request sends `store: false` and asks the model to research current web evidence before recommending a purchase.
+- The response should be treated as research support: always recheck the current price, seller, warranty, and delivery conditions before buying.
+
+You can also set the key once for the current Windows terminal before starting the app:
+
+```powershell
+$env:OPENAI_API_KEY = "your_api_key"
+python src/run_nuri.py
+```
+=======
 Live shopping recommendations need a separate, approved data source (for example a shopping-search API) and an AI provider. That integration should keep the same flow: collect sources, show the evidence, recommend, and require user approval for any action.
+>>>>>>> 1f5f0b49cfdfc9299f2e1702c2febb648141543f
 
 반복되는 문서 파일명 정리 작업을 빠르고 안전하게 처리하기 위한 데스크톱 파일 관리 도구입니다.
 
