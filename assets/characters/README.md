@@ -106,12 +106,21 @@ lowres, bad anatomy, bad hands, extra fingers, text, watermark, signature, multi
 
 표정 6종은 고화질 시트에서 잘랐지만, 기본 표정은 아직 저해상도 시트(1024×572)에서 잘라서 상대적으로 흐립니다. 기본 표정도 고화질로 다시 뽑으면 같은 방식으로 다시 잘라 넣을 수 있습니다.
 
-이 이미지들은 아래 명령으로 다시 만들 수 있습니다. 시트를 새로 뽑았다면, 스크립트 위쪽에 적힌 자르는 위치와 눈 위치를 먼저 새로 재야 합니다.
+이 이미지들은 아래 명령으로 다시 만들 수 있습니다. 시트를 새로 뽑았다면, `tools/build_frames.py`의 `CHARACTERS` 설정에 적힌 자르는 위치와 눈 위치를 먼저 새로 재야 합니다.
 
 ```bash
 pip install pillow numpy scipy rembg onnxruntime
-python tools/build_nuri_frames.py
+python tools/build_frames.py nuri   # 세라는 sera
 ```
+
+## 세라 이미지 현황
+
+`sera/` 폴더도 누리와 같은 방식으로 만들었습니다 (`python tools/build_frames.py sera`).
+
+- 원본: `reference_sheet.webp` (기본 표정, 2000×1116 고화질), `reference_expressions.png` (표정 6종, 1024×572)
+- 표정 시트가 저해상도라 표정 6종은 기본 표정보다 조금 흐립니다. 표정 시트를 고화질로 다시 뽑으면 더 선명해집니다.
+- 말하는 입: `neutral_talk`, `thinking_talk`, `sad_talk`. 화남은 삐친 입 모양이라 입 벌린 그림을 덧그리면 어색해서 만들지 않았습니다.
+- 눈 감은 모습: `neutral_blink`
 
 ## 새 캐릭터 시트 뽑는 요령 (잘라 넣기 쉬운 형식)
 
