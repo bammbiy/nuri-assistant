@@ -90,7 +90,8 @@ CHARACTERS = {
         # erase: sheet boxes where semi-transparent leftovers of the background (a sticky note
         # and the board edge beside the hair) are dropped; the opaque hair stays.
         full=dict(crop=(170, 60, 580, 1116), top=87, bottom=1099, mid=(371.5, 182), dist=47,
-                  erase=((420, 60, 580, 240),)),
+                  erase=((420, 60, 580, 240),), mouth_shift=(0.15, 0.05),
+                  mouth={e: (0.42, 0.34, 0.92) for e in ("neutral", "happy", "thinking", "surprised", "sad", "angry", "shy")}),
         expressions=dict(
             sheet="reference_expressions.webp",
             # Rows stop above the Korean/English labels printed under each face.
@@ -291,8 +292,13 @@ def build_full(config, folder, session, frames, out):
         ImageDraw.Draw(band).ellipse([ex - 1.0 * d, ey - 0.6 * d, ex + 1.0 * d, ey + 0.5 * d], fill=255)
         mouth = Image.new("L", (W, H), 0)
         ImageDraw.Draw(mouth).ellipse([ex - half * d, ey + top * d, ex + half * d, ey + bottom * d], fill=255)
-        mask = Image.fromarray(np.maximum(np.array(band), np.array(mouth)))
-        return mask.filter(ImageFilter.GaussianBlur(d * 0.07))
+        blur = ImageFilter.GaussianBlur(d * 0.07)
+        return band.filter(blur), mouth.filter(blur)
+
+    def masked(img, mask):
+        img = img.copy()
+        img.putalpha(Image.composite(img.getchannel("A"), Image.new("L", img.size, 0), mask))
+        return img
 
     out = out / "full"
     out.mkdir(parents=True, exist_ok=True)
@@ -304,7 +310,17 @@ def build_full(config, folder, session, frames, out):
             oval = Image.new("L", (W, H), 0)
             ImageDraw.Draw(oval).ellipse([ex - half * d, ey + top * d, ex + half * d, ey + bottom * d], fill=255)
             face = cover(face, full["cover"][expression], oval)
-        face.putalpha(Image.composite(face.getchannel("A"), Image.new("L", face.size, 0), face_mask(frame_name, frame)))
+        band, mouth = face_mask(frame_name, frame)
+        if "mouth_shift" in full:
+            # The full-body face is turned slightly, so its mouth sits off the eye midline:
+            # move the bust mouth there (eye-distance units) so it replaces the drawn one.
+            dx, dy = (round(v * d) for v in full["mouth_shift"])
+            shifted = Image.new("RGBA", face.size, (0, 0, 0, 0))
+            shifted.alpha_composite(masked(face, mouth), (max(dx, 0), max(dy, 0)), (max(-dx, 0), max(-dy, 0)))
+            face = masked(face, band)
+            face.alpha_composite(shifted)
+        else:
+            face = masked(face, Image.fromarray(np.maximum(np.array(band), np.array(mouth))))
         size = (round(W * face_k), round(H * face_k))
         small = face.convert("RGBa").resize(size, Image.LANCZOS).convert("RGBA")
         result = base.copy()
