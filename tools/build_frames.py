@@ -64,10 +64,17 @@ CHARACTERS = {
 }
 
 def place(img, mid, k):
-    """Scale by k and move `mid` to EYE_OUT, in premultiplied alpha to avoid dark fringes."""
-    left, top = mid[0] - EYE_OUT[0] / k, mid[1] - EYE_OUT[1] / k
+    """Scale by k and move `mid` to EYE_OUT, in premultiplied alpha to avoid dark fringes.
+
+    LANCZOS with a float source box keeps sub-pixel eye alignment and stays crisp when
+    shrinking HD sheets. The source is padded first because the box may reach past it.
+    """
+    pad = int(max(W, H) / k) + 2
+    padded = Image.new("RGBA", (img.width + 2 * pad, img.height + 2 * pad), (0, 0, 0, 0))
+    padded.paste(img, (pad, pad))
+    left, top = mid[0] + pad - EYE_OUT[0] / k, mid[1] + pad - EYE_OUT[1] / k
     box = (left, top, left + W / k, top + H / k)
-    return img.convert("RGBa").transform((W, H), Image.EXTENT, box, Image.BICUBIC).convert("RGBA")
+    return padded.convert("RGBa").resize((W, H), Image.LANCZOS, box=box).convert("RGBA")
 
 def to_out(p, mid, k):
     return ((p[0] - mid[0]) * k + EYE_OUT[0], (p[1] - mid[1]) * k + EYE_OUT[1])

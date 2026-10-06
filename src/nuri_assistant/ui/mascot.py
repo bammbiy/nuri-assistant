@@ -47,7 +47,9 @@ ASSETS_DIR = Path(__file__).resolve().parents[3] / "assets" / "characters"
 SETTINGS_PATH = APP_DIR / "companion.json"
 MEMORY_PATH = APP_DIR / "companion.sqlite3"
 
-WIDTH = 360
+# Character frames are 405px wide and CHAR_BOX is WIDTH - 10, so they show 1:1 with no
+# runtime resampling (which is what made the art look soft, especially without Pillow).
+WIDTH = 415
 CANVAS_HEIGHT = 560
 # The chat box appears right under the character, in the strip below CHAR_BOTTOM.
 CHAR_BOTTOM = CANVAS_HEIGHT - CHAT_HEIGHT - 18
