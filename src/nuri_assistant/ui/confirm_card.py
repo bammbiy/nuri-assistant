@@ -33,14 +33,15 @@ class ConfirmCard:
         x2, y2 = x1 + self.width, y1 + HEIGHT
         self._round_rect(x1, y1 + 3, x2, y2 + 3, 14, fill=CARD_SHADOW, outline="")
         self._round_rect(x1, y1, x2, y2, 14, fill="#ffffff", outline=PILL_LINE, width=2)
-        adding = action.kind == "add"
+        # add/done are positive actions (accent); cancel/delete are destructive (red).
+        adding = action.kind in ("add", "done")
         canvas.create_text(x1 + 16, y1 + 16, anchor="w", text=action.heading, fill=ACCENT if adding else DANGER,
                            font=(ENTRY_FONT[0], 9, "bold"), tags=TAG)
         canvas.create_text(x1 + 16, y1 + 38, anchor="w", text=f"{action.when}  ·  {action.title}", fill=TEXT,
                            width=self.width - 32, font=(ENTRY_FONT[0], 11, "bold"), tags=TAG)
 
         yes_color, yes_hover = (ACCENT, ACCENT_HOVER) if adding else (DANGER, DANGER_HOVER)
-        self._button(x2 - 76, y2 - 32, 64, "등록" if adding else "삭제", yes_color, yes_hover, "#ffffff", "confirm_yes", on_yes)
+        self._button(x2 - 76, y2 - 32, 64, {"add": "등록", "done": "완료"}.get(action.kind, "삭제"), yes_color, yes_hover, "#ffffff", "confirm_yes", on_yes)
         self._button(x2 - 146, y2 - 32, 64, "취소", SOFT, SOFT_HOVER, TEXT, "confirm_no", on_no)
         canvas.tag_raise(TAG)
 

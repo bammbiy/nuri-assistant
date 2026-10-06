@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, fields, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 
 from .llm import DEFAULT_MODEL, DEFAULT_OLLAMA_URL
@@ -23,6 +23,10 @@ class CompanionSettings:
     naver_client_id: str = ""
     naver_client_secret: str = ""
     price_check_minutes: int = 60
+    # Japanese voice through a local VOICEVOX-compatible engine.
+    voice_enabled: bool = False
+    voice_url: str = "http://127.0.0.1:50021"
+    voice_ids: dict = field(default_factory=dict)  # persona id -> engine style id
     x: int | None = None
     y: int | None = None
 

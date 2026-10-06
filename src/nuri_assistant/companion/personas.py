@@ -34,8 +34,16 @@ class Persona:
     briefing: str = "오늘 일정은 {count}개예요."
     # Price alert: {title}, {price} like "289,000원", {mall}.
     price_alert: str = "'{title}' 지금 {price}이에요! ({mall})"
+    # To-do nag: {when} is "내일까지" or "오늘까지".
+    todo_nag: str = "'{title}' {when}예요! 잊지 마세요."
+    # Focus timer: {minutes} is the break / focus length.
+    focus_done: str = "집중 끝! {minutes}분 쉬어요."
+    break_done: str = "쉬는 시간 끝! 다시 {minutes}분 집중해 봐요."
+    all_done: str = "집중 타이머 끝! 수고했어요."
+    # VOICEVOX style id used for this character's Japanese voice (changeable in settings).
+    voice_id: int = 8
 
-    def system_prompt(self, user_name: str = "", now: str = "", tools: bool = False) -> str:
+    def system_prompt(self, user_name: str = "", now: str = "", tools: bool = False, voice: bool = False) -> str:
         who = f"사용자의 이름은 '{user_name}'이다. " if user_name else ""
         when = f"현재 시각은 {now}이다. " if now else ""
         if tools:
@@ -47,9 +55,17 @@ class Persona:
                 "조회 결과는 시간 순서대로 짧게 정리해 말한다. "
                 "상품 최저가를 물으면 search_prices로 찾아보고, 최저가가 뜨면 알려 달라고 하면 add_price_watch를 쓴다. "
                 "'30만원'처럼 말한 금액은 원 단위 숫자(300000)로 바꿔 넘긴다. 도구 결과에 없는 가격은 절대 지어내지 않는다. "
+                "할 일(마감 있는 일)은 add_todo, 끝냈다고 하면 complete_todo를 쓴다. 기한 표현은 그대로 넘긴다. "
+                "'25분 집중 모드'처럼 집중하겠다고 하면 start_focus_timer를 쓴다. "
             )
         else:
-            abilities = "지금 AI 모델은 도구 호출을 쓸 수 없어서 일정 관리나 최저가 알림을 직접 할 수 없다. "
+            abilities = "지금 AI 모델은 도구 호출을 쓸 수 없어서 일정, 할 일, 최저가 알림, 타이머를 직접 다룰 수 없다. "
+        if voice:
+            abilities += (
+                "답변이 음성으로도 나간다. 한국어 답변을 다 쓴 뒤 맨 끝에, 같은 내용을 캐릭터 말투를 살린 자연스러운 "
+                "일본어 구어체로 <ja>...</ja> 안에 한 번 더 쓴다. 표정 태그는 <ja> 안에 넣지 않는다. "
+                "예: [happy] 좋아, 같이 해보자! <ja>よし、一緒にやってみよう！</ja> "
+            )
         tags = ", ".join(f"[{expression}]" for expression in EXPRESSIONS)
         return (
             f"너는 '{self.name}'. 일본 애니메이션의 {self.archetype} 캐릭터 같은 성격을 가진, "
@@ -96,6 +112,11 @@ PERSONAS: dict[str, Persona] = {
             reminder="선배, {when} '{title}' 일정이 있어요! 준비하세요~",
             briefing="선배, 오늘 일정은 {count}개예요! 누리가 정리해 왔어요.",
             price_alert="선배! '{title}' {price}까지 떨어졌어요! ({mall}) 지금이 기회예요!",
+            todo_nag="선배, '{title}' {when}예요! 미루면 안 돼요~",
+            focus_done="선배, 집중 끝! {minutes}분 쉬어요~",
+            break_done="쉬는 시간 끝! 다시 {minutes}분 힘내요, 선배!",
+            all_done="선배, 오늘 집중 끝! 정말 수고했어요!",
+            voice_id=8,  # VOICEVOX 春日部つむぎ
         ),
         Persona(
             id="sera",
@@ -123,6 +144,11 @@ PERSONAS: dict[str, Persona] = {
             reminder="동생, {when} '{title}' 있는 거 알지? 누나가 챙겨 줬어.",
             briefing="오늘 동생 일정은 {count}개야. 누나가 정리해 뒀어.",
             price_alert="동생, '{title}' {price} 됐어. ({mall}) 누나가 지켜보고 있었지.",
+            todo_nag="동생, '{title}' {when}인 거 알지? 누나가 지켜본다?",
+            focus_done="후후, 집중 끝. {minutes}분은 누나랑 쉬자.",
+            break_done="자, 다시 {minutes}분. 동생 할 수 있지?",
+            all_done="수고했어, 동생. 오늘은 칭찬해 줄게.",
+            voice_id=17,  # VOICEVOX 九州そら セクシー
         ),
         Persona(
             id="akane",
@@ -143,6 +169,11 @@ PERSONAS: dict[str, Persona] = {
             reminder="{when} '{title}' 있잖아! 잊어버리면 안 된다고!",
             briefing="오늘 일정 {count}개야. 흥, 내가 정리해 줬으니까 고마운 줄 알아!",
             price_alert="'{title}' {price}이야! ({mall}) 흥, 놓치면 바보라고!",
+            todo_nag="'{title}' {when}잖아! 또 미루기만 해 봐!",
+            focus_done="흥, 집중 끝이야. {minutes}분만 쉬어!",
+            break_done="쉬는 시간 끝! 다시 {minutes}분, 딴짓하면 혼나!",
+            all_done="끝났어. ...뭐, 꽤 열심히 했네.",
+            voice_id=6,  # VOICEVOX 四国めたん ツンツン
         ),
         Persona(
             id="shizuku",
@@ -160,6 +191,11 @@ PERSONAS: dict[str, Persona] = {
             reminder="...{when} '{title}'. 잊지 마.",
             briefing="...오늘 일정, {count}개.",
             price_alert="...'{title}', {price}. ({mall}) 살 거면 지금.",
+            todo_nag="...'{title}', {when}.",
+            focus_done="...집중 끝. {minutes}분 쉬어.",
+            break_done="...다시 {minutes}분.",
+            all_done="...수고했어.",
+            voice_id=14,  # VOICEVOX 冥鳴ひまり
         ),
         Persona(
             id="hinata",
@@ -174,6 +210,11 @@ PERSONAS: dict[str, Persona] = {
             reminder="{when} '{title}' 있어! 같이 준비하자!",
             briefing="오늘 일정은 {count}개야! 하나씩 해치우자!",
             price_alert="대박! '{title}' {price}래! ({mall}) 얼른 보러 가자!",
+            todo_nag="'{title}' {when}야! 같이 끝내 버리자!",
+            focus_done="집중 끝! {minutes}분 쉬자~!",
+            break_done="다시 {minutes}분 파이팅!",
+            all_done="다 했다! 최고야!",
+            voice_id=10,  # VOICEVOX 雨晴はう
         ),
         Persona(
             id="sakura",
@@ -188,6 +229,11 @@ PERSONAS: dict[str, Persona] = {
             reminder="주인님, {when} '{title}' 일정이 있습니다.",
             briefing="주인님, 오늘 일정은 {count}개입니다.",
             price_alert="주인님, '{title}'이(가) {price}입니다. ({mall})",
+            todo_nag="주인님, '{title}' {when}입니다.",
+            focus_done="주인님, 집중 시간이 끝났습니다. {minutes}분 쉬어 주세요.",
+            break_done="주인님, 다시 {minutes}분 집중하실 시간입니다.",
+            all_done="주인님, 오늘도 수고 많으셨습니다.",
+            voice_id=15,  # VOICEVOX 九州そら あまあま
         ),
         Persona(
             id="reika",
@@ -202,6 +248,11 @@ PERSONAS: dict[str, Persona] = {
             reminder="{when} '{title}' 일정이에요. 늦지 않도록 하세요, 오호호!",
             briefing="오늘 일정은 {count}개랍니다. 우아하게 해치워 볼까요?",
             price_alert="'{title}'이(가) {price}랍니다. ({mall}) 현명한 소비를 하도록 해요, 오호호!",
+            todo_nag="'{title}' {when}이랍니다. 우아하게 끝내도록 해요.",
+            focus_done="집중 끝이에요. {minutes}분 티타임을 가지세요, 오호호!",
+            break_done="다시 {minutes}분이에요. 레이카가 지켜보고 있답니다.",
+            all_done="훌륭해요! 오늘의 집중은 완벽했답니다.",
+            voice_id=2,  # VOICEVOX 四国めたん ノーマル
         ),
     )
 }

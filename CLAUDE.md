@@ -27,10 +27,13 @@ src/nuri_assistant/
 ├── companion/   # 캐릭터 대화: personas(성격·말투·대사 틀), llm(Ollama 스트리밍+도구 호출),
 │                # brain(도구 루프, 대화 기억), reply(표정 태그·<think> 제거), memory, settings, toolbox
 ├── schedule/    # 일정: timeparse(한국어 날짜 해석), store(SQLite), tools(add/list/cancel_event)
+├── todo/        # 할 일: store(마감·잔소리 시점), tools(add/list/complete/delete_todo)
+├── focus/       # 집중 타이머: timer(집중·휴식 단계, tick), tools(start/stop/status)
+├── voice/       # 일본어 음성: voicevox(VOICEVOX 호환 HTTP 클라이언트), speaker(번역→합성→재생 스레드), player
 ├── pricewatch/  # 최저가: sources(네이버 쇼핑 검색 API·상품 페이지), store, checker(알림 규칙), tools
 ├── core/ metadata/ storage/ assistant/ shopping/   # 기존 파일 이름 정리 도구와 구매 비서
-└── ui/          # mascot(캐릭터 창), chatbox, confirm_card, picker, schedule_window, price_window,
-                 # price_settings, placeholder(그림 없는 캐릭터용 도형), theme(색·공용 위젯), desktop(파일 도구)
+└── ui/          # mascot(캐릭터 창), chatbox, confirm_card, picker, schedule_window, todo_window, price_window,
+                 # price_settings, voice_settings, placeholder(그림 없는 캐릭터용 도형), theme(색·공용 위젯), desktop(파일 도구)
 assets/characters/<id>/   # 캐릭터 표정 PNG와 원본 시트
 tools/build_frames.py     # 원본 시트 → 정렬된 표정 프레임
 ```
@@ -43,7 +46,7 @@ tools/build_frames.py     # 원본 시트 → 정렬된 표정 프레임
 2. **날짜 계산은 코드가 한다.** 작은 로컬 모델은 날짜 계산을 틀리므로, 모델은 사용자 표현("다음 주 화요일 3시")을 그대로 넘기고 `schedule/timeparse.py`가 해석합니다. 새 표현은 여기에 추가하고 `tests/test_schedule.py`에 사례를 넣습니다.
 3. **가격은 지어내지 않는다, 무료 출처만 쓴다.** 가격은 누구나 무료로 키를 받을 수 있는 공식 API(현재 네이버 쇼핑 검색) 또는 상품 페이지의 구조화된 데이터에서만 가져옵니다. 가입 심사나 실적 조건이 있는 API(쿠팡 파트너스 등)는 넣지 않습니다. 자동 조회를 막는 사이트(쿠팡 웹페이지 등)를 우회해서 긁지 않습니다.
 4. **로컬 우선.** 대화는 로컬 Ollama로만 합니다. API 키는 로컬 설정 파일에만 저장하고 저장소에 올리지 않습니다.
-5. **시간이 중요한 알림은 AI를 거치지 않는다.** 일정 알림, 아침 브리핑, 가격 알림은 앱이 페르소나의 대사 틀(`reminder`, `briefing`, `price_alert`)로 바로 말합니다.
+5. **시간이 중요한 알림은 AI를 거치지 않는다.** 일정 알림, 할 일 잔소리, 타이머, 아침 브리핑, 가격 알림은 앱이 페르소나의 대사 틀(`reminder`, `todo_nag`, `focus_done`, `briefing`, `price_alert` 등)로 바로 말합니다. 음성용 일본어 번역만 로컬 AI를 거치고, 번역이 실패해도 말풍선은 그대로 나옵니다.
 6. **도구를 못 쓰는 모델도 동작해야 한다.** `OllamaToolsUnsupported`가 나면 그 세션은 도구 없이 대화만 합니다.
 
 ## 코드 관례
@@ -52,7 +55,8 @@ tools/build_frames.py     # 원본 시트 → 정렬된 표정 프레임
 - 파일 이동은 `core.operations.move_no_clobber`만 씁니다. `Path.rename`은 macOS/Linux에서 기존 파일을 덮어씁니다.
 - 테스트용 가짜 클라이언트의 `chat_stream`은 `(model, messages, options=None, tools=None)`을 받아야 합니다.
 - 새 도구 묶음은 `specs`, `execute`, `take_pending`, `owns`, `confirm`을 갖춘 클래스로 만들고 `ToolBox`에 넣습니다. 확인 카드는 액션의 `kind`, `heading`, `when`, `title` 속성만 읽습니다.
-- 백그라운드 작업(모델 호출, 가격 조회)은 스레드에서 돌리고 결과는 `MascotApp.events` 큐로 UI 스레드에 넘깁니다. 스레드에서 Tk 위젯을 직접 만지지 않습니다.
+- 말풍선과 음성을 같이 낼 때는 `MascotApp.talk()`을 씁니다 (`say()`는 말풍선만). 오류·안내 문구는 음성으로 읽지 않습니다.
+- 백그라운드 작업(모델 호출, 가격 조회, 음성 합성)은 스레드에서 돌리고 결과는 `MascotApp.events` 큐로 UI 스레드에 넘깁니다. 스레드에서 Tk 위젯을 직접 만지지 않습니다.
 
 ## UI 관례
 

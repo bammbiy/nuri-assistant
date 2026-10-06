@@ -23,9 +23,12 @@ from ..companion import (
     save_settings,
 )
 from ..companion import ToolBox
+from ..focus import FocusTimer, FocusTools
 from ..pricewatch import CheckResult, NaverShopping, PriceChecker, PriceTools, WatchAction, WatchStore, won
 from ..schedule import Event, PendingAction, ScheduleStore, ScheduleTools
 from ..storage import HistoryStore
+from ..todo import TodoStore, TodoTools
+from ..voice import VoiceSpeaker, VoicevoxClient
 from .assistant import AssistantWindow
 from .desktop import APP_DIR, DB_PATH, NuriAssistantApp
 from .chatbox import HEIGHT as CHAT_HEIGHT, ChatBox, draw_pill, subject_particle
@@ -35,6 +38,9 @@ from .placeholder import PLACEHOLDER_HEIGHT, draw_emote, draw_placeholder
 from .price_settings import PriceSettingsWindow
 from .price_window import PriceWindow
 from .schedule_window import ScheduleWindow
+from .theme import ACCENT, TODAY
+from .todo_window import TodoWindow
+from .voice_settings import VoiceSettingsWindow
 
 
 ASSETS_DIR = Path(__file__).resolve().parents[3] / "assets" / "characters"
@@ -79,7 +85,20 @@ class MascotApp(tk.Tk):
         self.watches = WatchStore(app_dir / MEMORY_PATH.name)
         self.price_checker = PriceChecker(self.watches, self._price_sources)
         self.price_tools = PriceTools(self.watches, self.price_checker)
-        self.toolbox = ToolBox([self.schedule_tools, self.price_tools])
+        self.todos = TodoStore(app_dir / MEMORY_PATH.name)
+        self.focus_timer = FocusTimer()
+        self.toolbox = ToolBox([
+            self.schedule_tools, TodoTools(self.todos), self.price_tools, FocusTools(self.focus_timer),
+        ])
+        self.voice = VoiceSpeaker(
+            client=lambda: VoicevoxClient(self.settings.voice_url),
+            translate=self._to_japanese,
+            on_start=lambda: self.events.put(("voice", True)),
+            on_end=lambda: self.events.put(("voice", False)),
+            on_error=lambda message: self.events.put(("voice_error", message)),
+        )
+        self._ja_cache: dict[str, str] = {}
+        self._voice_error_shown = False
         self._price_checking = False
         self._bubble_link = ""
         self.pending_actions: list[PendingAction] = []
@@ -109,10 +128,11 @@ class MascotApp(tk.Tk):
             self.withdraw()
             self.after(10, lambda: self.open_picker(startup=True))
         else:
-            self.say(random.choice(self.persona.greetings), "happy")
+            self.talk(random.choice(self.persona.greetings), "happy")
             self.after(BRIEFING_DELAY_MS, self.brief_today)
         self.after(50, self._drain_events)
         self.after(5000, self._check_reminders)
+        self.after(1000, self._tick_timer)
         self.after(FIRST_PRICE_CHECK_MS, self._price_loop)
         self.after(3500, self._blink)
         self.after(120, self._watch_pointer)
@@ -132,6 +152,7 @@ class MascotApp(tk.Tk):
             user_name=settings.user_name,
             history_limit=settings.history_limit,
             tools=self.toolbox,
+            voice=settings.voice_enabled,
         )
 
     def _update_settings(self, **changes: object) -> None:
@@ -181,8 +202,12 @@ class MascotApp(tk.Tk):
         self.menu.add_separator()
         self.menu.add_command(label="일정 보기", command=lambda: ScheduleWindow(self, self.schedule))
         self.menu.add_command(label="오늘 일정 브리핑", command=lambda: self.brief_today(force=True))
+        self.menu.add_command(label="할 일", command=lambda: TodoWindow(self, self.todos))
+        self.menu.add_command(label="집중 타이머 시작 (25분)", command=lambda: self.start_focus(25, 5))
         self.menu.add_command(label="최저가 알림", command=self.open_price_window)
+        self.menu.add_separator()
         self.menu.add_command(label="가격 알림 설정…", command=self.open_price_settings)
+        self.menu.add_command(label="음성 설정…", command=self.open_voice_settings)
         self.menu.add_separator()
         self.menu.add_command(label="대화 기록 보기", command=self.show_log)
         self.menu.add_command(label="이 캐릭터의 기억 지우기", command=self.clear_memory)
@@ -222,7 +247,7 @@ class MascotApp(tk.Tk):
         if self._dragged:
             self._update_settings(x=self.winfo_x(), y=self.winfo_y())
         elif not self.busy:
-            self.say(random.choice(self.persona.pokes), random.choice(("surprised", "shy", "happy")))
+            self.talk(random.choice(self.persona.pokes), random.choice(("surprised", "shy", "happy")))
             self.chat.focus()
 
     def _show_menu(self, event: tk.Event) -> None:
@@ -319,7 +344,7 @@ class MascotApp(tk.Tk):
             self.head_top = head_top
             self._show_bubble(self._bubble_text)
         # Freshly drawn character items would otherwise cover the overlays.
-        for overlay in ("bubble", "confirm", "chat"):
+        for overlay in ("timer", "bubble", "confirm", "chat"):
             self.canvas.tag_raise(overlay)
 
     def set_expression(self, expression: str) -> None:
@@ -445,7 +470,7 @@ class MascotApp(tk.Tk):
         except Exception as exc:  # noqa: BLE001 - every failure must reach the bubble and re-enable input
             self.events.put(("error", str(exc)))
             return
-        self.events.put(("done", reply.text, reply.expression, reply.actions))
+        self.events.put(("done", reply.text, reply.expression, reply.actions, reply.voice))
 
     def _drain_events(self) -> None:
         try:
@@ -457,9 +482,10 @@ class MascotApp(tk.Tk):
                         self._start_talking()
                         self.say(visible, expression)
                 elif kind == "done":
-                    text, expression, actions = values
+                    text, expression, actions, spoken = values
                     self.talking = False
                     self.say(text, expression)
+                    self.speak(text, japanese=spoken)
                     self._set_busy(False)
                     if actions:
                         self.pending_actions = list(actions)
@@ -468,6 +494,15 @@ class MascotApp(tk.Tk):
                     self.talking = False
                     self.say(f"앗, 문제가 생겼어요.\n{values[0]}", "sad")
                     self._set_busy(False)
+                elif kind == "voice":
+                    if values[0]:
+                        self._start_talking()
+                    else:
+                        self.talking = False
+                elif kind == "voice_error":
+                    if not self._voice_error_shown:
+                        self._voice_error_shown = True
+                        self.say(f"목소리가 안 나와요.\n{values[0]}", "sad")
                 elif kind == "prices":
                     self._show_price_results(values[0])
                 elif kind == "notice":
@@ -513,11 +548,11 @@ class MascotApp(tk.Tk):
         if approved:
             message = self.toolbox.confirm(action)
             self.companion.note(message)
-            self.say(message, "happy")
+            self.talk(message, "happy")
             if isinstance(action, WatchAction) and action.kind == "add":
                 self.check_prices_now()
         else:
-            message = f"알겠어요, '{action.title}' {'등록은' if action.kind == 'add' else '취소는'} 하지 않을게요."
+            message = f"알겠어요, '{action.title}'은(는) 그대로 둘게요."
             self.companion.note(message, "neutral")
             self.say(message, "neutral")
         self._show_next_card()
@@ -530,7 +565,13 @@ class MascotApp(tk.Tk):
                 # One per poll so bubbles do not overwrite each other; the rest stay due.
                 event = due[0]
                 self.schedule.mark_reminded(event.id)
-                self.say(self.persona.reminder.format(when=_until(event, now), title=event.title), "surprised")
+                self.talk(self.persona.reminder.format(when=_until(event, now), title=event.title), "surprised")
+                self.bell()
+            elif nags := self.todos.due_nags(now):
+                todo, kind = nags[0]
+                self.todos.mark_nagged(todo.id, kind)
+                when = "내일까지" if kind == "eve" else "오늘까지"
+                self.talk(self.persona.todo_nag.format(title=todo.title, when=when), "angry" if kind == "day" else "thinking")
                 self.bell()
         self.after(REMINDER_POLL_MS, self._check_reminders)
 
@@ -545,14 +586,110 @@ class MascotApp(tk.Tk):
             self._update_settings(last_briefing=today)
         start = datetime.combine(now.date(), datetime.min.time())
         events = self.schedule.between(start, start + timedelta(days=1))
-        if not events:
+        urgent = [todo for todo in self.todos.open() if todo.due and todo.due.date() <= now.date()]
+        if not events and not urgent:
             if force:
-                self.say("오늘은 등록된 일정이 없어요.", "neutral")
+                self.say("오늘은 일정도 급한 할 일도 없어요.", "neutral")
             return
-        lines = [f"· {'하루 종일' if e.all_day else e.start.strftime('%H:%M')} {e.title}" for e in events[:5]]
-        if len(events) > 5:
-            lines.append(f"· 외 {len(events) - 5}개")
-        self.say(self.persona.briefing.format(count=len(events)) + "\n" + "\n".join(lines), "happy")
+        parts, headline = [], ""
+        if events:
+            headline = self.persona.briefing.format(count=len(events))
+            parts.append(headline)
+            parts += [f"· {'하루 종일' if e.all_day else e.start.strftime('%H:%M')} {e.title}" for e in events[:4]]
+            if len(events) > 4:
+                parts.append(f"· 외 {len(events) - 4}개")
+        if urgent:
+            if not headline:
+                headline = "오늘 챙겨야 할 일이 있어요."
+                parts.append(headline)
+            parts.append("할 일: " + ", ".join(f"{t.title}({t.d_day(now.date())})" for t in urgent[:3])
+                         + (f" 외 {len(urgent) - 3}개" if len(urgent) > 3 else ""))
+        self.say("\n".join(parts), "happy")
+        self.speak(headline)
+
+    # ----- focus timer --------------------------------------------------------------
+
+    def start_focus(self, focus_minutes: int = 25, break_minutes: int = 5) -> None:
+        self.focus_timer.start(datetime.now(), focus_minutes, break_minutes)
+        self.talk(f"{focus_minutes}분 집중 시작! 끝나면 알려 줄게요.", "happy")
+        self._draw_timer()
+
+    def _tick_timer(self) -> None:
+        now = datetime.now()
+        for event in self.focus_timer.tick(now):
+            line = {
+                "focus_done": self.persona.focus_done.format(minutes=self.focus_timer.break_minutes),
+                "break_done": self.persona.break_done.format(minutes=self.focus_timer.focus_minutes),
+                "all_done": self.persona.all_done,
+            }[event]
+            self.talk(line, "happy" if event != "break_done" else "neutral")
+            self.bell()
+        self._draw_timer()
+        self.after(1000, self._tick_timer)
+
+    def _draw_timer(self) -> None:
+        """Small pill badge at the character's top-left: 집중 24:12 ■ (click to stop)."""
+
+        canvas = self.canvas
+        canvas.delete("timer")
+        state = self.focus_timer.state(datetime.now())
+        if state.phase is None:
+            return
+        label = f"{'집중' if state.phase == 'focus' else '휴식'} {state.clock}"
+        if state.cycles > 1:
+            label += f"  {min(state.cycle, state.cycles)}/{state.cycles}"
+        color = ACCENT if state.phase == "focus" else TODAY
+        x, y = 14, max(self.head_top - 6, 6)
+        text = canvas.create_text(x + 14, y + 13, text=label, anchor="w", font=(BUBBLE_FONT[0], 10, "bold"), fill="#ffffff", tags="timer")
+        right = canvas.bbox(text)[2] + 30
+        draw_pill(canvas, x, y, right, y + 26, fill=color, tags="timer")
+        canvas.create_rectangle(right - 19, y + 9, right - 11, y + 17, fill="#ffffff", outline="", tags="timer")
+        canvas.tag_raise(text)
+        canvas.tag_bind("timer", "<Button-1>", lambda _event: self._stop_timer())
+        for overlay in ("bubble", "confirm", "chat"):
+            canvas.tag_raise(overlay)
+
+    def _stop_timer(self) -> None:
+        if self.focus_timer.stop():
+            self._draw_timer()
+            self.talk("타이머를 멈췄어요.", "neutral")
+
+    # ----- voice ----------------------------------------------------------------------
+
+    def talk(self, text: str, expression: str | None = None) -> None:
+        """Say a line in the bubble and, when voice is on, out loud."""
+
+        self.say(text, expression)
+        self.speak(text)
+
+    def speak(self, text: str, japanese: str = "") -> None:
+        if not self.settings.voice_enabled or not (text.strip() or japanese.strip()):
+            return
+        voice_id = self.settings.voice_ids.get(self.persona.id, self.persona.voice_id)
+        self.voice.speak(voice_id, japanese=japanese, korean="" if japanese else text)
+
+    def _to_japanese(self, text: str) -> str:
+        key = f"{self.persona.id}:{text}"
+        if key not in self._ja_cache:
+            self._ja_cache[key] = self.companion.to_japanese(text)
+        return self._ja_cache[key]
+
+    def open_voice_settings(self) -> None:
+        def preview(url: str, voice_id: int) -> None:
+            speaker = VoiceSpeaker(
+                client=lambda: VoicevoxClient(url), translate=self._to_japanese,
+                on_start=lambda: self.events.put(("voice", True)), on_end=lambda: self.events.put(("voice", False)),
+                on_error=lambda message: self.events.put(("notice", message, "sad")),
+            )
+            line = random.choice(self.persona.greetings)
+            self.say(line, "happy")
+            speaker.speak(voice_id, korean=line)
+
+        def save(**changes: object) -> None:
+            self._voice_error_shown = False
+            self._update_settings(**changes)
+
+        VoiceSettingsWindow(self, self.settings, self.persona, save, preview)
 
     # ----- price watch --------------------------------------------------------------
 
@@ -593,6 +730,7 @@ class MascotApp(tk.Tk):
         offer = result.offer
         line = self.persona.price_alert.format(title=result.watch.label, price=won(offer.price), mall=offer.mall)
         self.say(f"{line}\n(말풍선을 누르면 상품 페이지가 열려요)", "surprised")
+        self.speak(line)
         self._bubble_link = offer.link
         self.bell()
 
@@ -637,7 +775,7 @@ class MascotApp(tk.Tk):
         self.chat.set_hint(self._idle_hint())
         self.expression = "neutral"
         self._render_character()
-        self.say(random.choice(self.persona.greetings), "happy")
+        self.talk(random.choice(self.persona.greetings), "happy")
 
     def ask_user_name(self) -> None:
         name = simpledialog.askstring("내 이름", "캐릭터가 알고 있을 이름을 입력하세요.", initialvalue=self.settings.user_name, parent=self)
