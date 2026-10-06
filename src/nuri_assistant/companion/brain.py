@@ -5,11 +5,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable
 
-from ..schedule import TOOL_SPECS, PendingAction, ScheduleTools
+from typing import Any
+
 from .llm import OllamaClient, OllamaToolsUnsupported, ToolCall
 from .memory import ConversationStore
 from .personas import Persona
 from .reply import ReplyParser
+from .toolbox import ToolBox
 
 
 WEEKDAYS = "월화수목금토일"
@@ -21,8 +23,8 @@ MAX_TOOL_ROUNDS = 4
 class CompanionReply:
     text: str
     expression: str
-    # Schedule changes the model proposed; the UI asks the user to confirm each one.
-    actions: tuple[PendingAction, ...] = ()
+    # Changes the model proposed (schedule, price watch); the UI asks the user to confirm each one.
+    actions: tuple[Any, ...] = ()
 
 
 class Companion:
@@ -37,7 +39,7 @@ class Companion:
         user_name: str = "",
         history_limit: int = 20,
         clock: Callable[[], datetime] = datetime.now,
-        tools: ScheduleTools | None = None,
+        tools: ToolBox | None = None,
     ) -> None:
         self.persona = persona
         self.client = client
@@ -53,7 +55,7 @@ class Companion:
     def build_messages(self, user_text: str) -> list[dict[str, str]]:
         now = self.clock()
         stamp = f"{now:%Y-%m-%d} ({WEEKDAYS[now.weekday()]}) {now:%H:%M}"
-        system = self.persona.system_prompt(self.user_name, stamp, schedule=self.tools_supported)
+        system = self.persona.system_prompt(self.user_name, stamp, tools=self.tools_supported)
         messages = [{"role": "system", "content": system}]
         messages.extend(
             {"role": row["role"], "content": row["content"]}
@@ -75,7 +77,7 @@ class Companion:
         messages: list[dict] = self.build_messages(text)
         visible, expression = "", "neutral"
         for _round in range(MAX_TOOL_ROUNDS):
-            tools = TOOL_SPECS if self.tools_supported else None
+            tools = self.tools.specs if self.tools_supported and self.tools is not None else None
             parser = ReplyParser(default_expression=expression)
             calls: list[ToolCall] = []
             try:

@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+import webbrowser
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -21,6 +22,8 @@ from ..companion import (
     load_settings,
     save_settings,
 )
+from ..companion import ToolBox
+from ..pricewatch import CheckResult, CoupangPartners, NaverShopping, PriceChecker, PriceTools, WatchAction, WatchStore, won
 from ..schedule import Event, PendingAction, ScheduleStore, ScheduleTools
 from ..storage import HistoryStore
 from .assistant import AssistantWindow
@@ -29,6 +32,8 @@ from .chatbox import HEIGHT as CHAT_HEIGHT, ChatBox, draw_pill, subject_particle
 from .confirm_card import HEIGHT as CARD_HEIGHT, ConfirmCard
 from .picker import CharacterPicker
 from .placeholder import PLACEHOLDER_HEIGHT, draw_emote, draw_placeholder
+from .price_settings import PriceSettingsWindow
+from .price_window import PriceWindow
 from .schedule_window import ScheduleWindow
 
 
@@ -45,6 +50,7 @@ CHAR_TOP = CHAR_BOTTOM - PLACEHOLDER_HEIGHT
 CHAR_BOX = (WIDTH - 10, CHAR_BOTTOM - 130)
 CHAT_HIDE_DELAY_MS = 1200
 REMINDER_POLL_MS = 20_000
+FIRST_PRICE_CHECK_MS = 30_000
 BRIEFING_DELAY_MS = 4500
 # Typed answers that settle a confirm card without asking the model.
 YES_WORDS = {"응", "어", "네", "넵", "넹", "예", "웅", "ㅇㅇ", "ㅇ", "좋아", "그래", "등록", "등록해", "삭제", "삭제해", "확인", "오케이", "ok", "okay"}
@@ -70,6 +76,12 @@ class MascotApp(tk.Tk):
         self.store = ConversationStore(app_dir / MEMORY_PATH.name)
         self.schedule = ScheduleStore(app_dir / MEMORY_PATH.name)
         self.schedule_tools = ScheduleTools(self.schedule)
+        self.watches = WatchStore(app_dir / MEMORY_PATH.name)
+        self.price_checker = PriceChecker(self.watches, self._price_sources)
+        self.price_tools = PriceTools(self.watches, self.price_checker)
+        self.toolbox = ToolBox([self.schedule_tools, self.price_tools])
+        self._price_checking = False
+        self._bubble_link = ""
         self.pending_actions: list[PendingAction] = []
         self.history = HistoryStore(app_dir / DB_PATH.name)
         self.user_dir = app_dir / "characters"
@@ -101,6 +113,7 @@ class MascotApp(tk.Tk):
             self.after(BRIEFING_DELAY_MS, self.brief_today)
         self.after(50, self._drain_events)
         self.after(5000, self._check_reminders)
+        self.after(FIRST_PRICE_CHECK_MS, self._price_loop)
         self.after(3500, self._blink)
         self.after(120, self._watch_pointer)
         threading.Thread(target=self._check_model, daemon=True).start()
@@ -118,7 +131,7 @@ class MascotApp(tk.Tk):
             model=settings.model,
             user_name=settings.user_name,
             history_limit=settings.history_limit,
-            tools=self.schedule_tools,
+            tools=self.toolbox,
         )
 
     def _update_settings(self, **changes: object) -> None:
@@ -147,7 +160,7 @@ class MascotApp(tk.Tk):
         self.canvas.tag_bind("character", "<ButtonPress-1>", self._on_press)
         self.canvas.tag_bind("character", "<B1-Motion>", self._on_drag)
         self.canvas.tag_bind("character", "<ButtonRelease-1>", self._on_release)
-        self.canvas.tag_bind("bubble", "<Button-1>", lambda _event: self._show_bubble(""))
+        self.canvas.tag_bind("bubble", "<Button-1>", lambda _event: self._bubble_clicked())
         self.canvas.bind("<Button-3>", self._show_menu)
         if sys.platform == "darwin":
             self.canvas.bind("<Button-2>", self._show_menu)
@@ -168,6 +181,8 @@ class MascotApp(tk.Tk):
         self.menu.add_separator()
         self.menu.add_command(label="일정 보기", command=lambda: ScheduleWindow(self, self.schedule))
         self.menu.add_command(label="오늘 일정 브리핑", command=lambda: self.brief_today(force=True))
+        self.menu.add_command(label="최저가 알림", command=self.open_price_window)
+        self.menu.add_command(label="가격 알림 설정…", command=self.open_price_settings)
         self.menu.add_separator()
         self.menu.add_command(label="대화 기록 보기", command=self.show_log)
         self.menu.add_command(label="이 캐릭터의 기억 지우기", command=self.clear_memory)
@@ -363,8 +378,16 @@ class MascotApp(tk.Tk):
     def _hide_bubble(self) -> None:
         self.canvas.delete("bubble")
 
+    def _bubble_clicked(self) -> None:
+        link, self._bubble_link = self._bubble_link, ""
+        if link:
+            webbrowser.open(link)
+        self._show_bubble("")
+
     def _show_bubble(self, text: str) -> None:
         self._hide_bubble()
+        if text != self._bubble_text:
+            self._bubble_link = ""
         self._bubble_text = text
         if not text:
             return
@@ -445,6 +468,8 @@ class MascotApp(tk.Tk):
                     self.talking = False
                     self.say(f"앗, 문제가 생겼어요.\n{values[0]}", "sad")
                     self._set_busy(False)
+                elif kind == "prices":
+                    self._show_price_results(values[0])
                 elif kind == "notice":
                     message, expression = values
                     self.say(message, expression)
@@ -486,9 +511,11 @@ class MascotApp(tk.Tk):
             return
         action = self.pending_actions.pop(0)
         if approved:
-            message = self.schedule_tools.confirm(action)
+            message = self.toolbox.confirm(action)
             self.companion.note(message)
             self.say(message, "happy")
+            if isinstance(action, WatchAction) and action.kind == "add":
+                self.check_prices_now()
         else:
             message = f"알겠어요, '{action.title}' {'등록은' if action.kind == 'add' else '취소는'} 하지 않을게요."
             self.companion.note(message, "neutral")
@@ -526,6 +553,60 @@ class MascotApp(tk.Tk):
         if len(events) > 5:
             lines.append(f"· 외 {len(events) - 5}개")
         self.say(self.persona.briefing.format(count=len(events)) + "\n" + "\n".join(lines), "happy")
+
+    # ----- price watch --------------------------------------------------------------
+
+    def _price_sources(self) -> list:
+        settings, sources = self.settings, []
+        if settings.naver_client_id and settings.naver_client_secret:
+            sources.append(NaverShopping(settings.naver_client_id, settings.naver_client_secret))
+        if settings.coupang_access_key and settings.coupang_secret_key:
+            sources.append(CoupangPartners(settings.coupang_access_key, settings.coupang_secret_key))
+        return sources
+
+    def _price_loop(self) -> None:
+        self.check_prices_now()
+        self.after(max(self.settings.price_check_minutes, 10) * 60_000, self._price_loop)
+
+    def check_prices_now(self) -> None:
+        """Check every watch on a worker thread; results come back through the event queue."""
+
+        if self._price_checking or not self.watches.all():
+            return
+        self._price_checking = True
+
+        def work() -> None:
+            results = []
+            try:
+                for watch in self.watches.all():
+                    results.append(self.price_checker.check(watch))
+            finally:
+                self.events.put(("prices", results))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _show_price_results(self, results: list[CheckResult]) -> None:
+        self._price_checking = False
+        alerts = [result for result in results if result.alert and result.offer]
+        for index, result in enumerate(alerts):
+            self.after(index * 9000, lambda result=result: self._announce_price(result))
+
+    def _announce_price(self, result: CheckResult) -> None:
+        offer = result.offer
+        line = self.persona.price_alert.format(title=result.watch.label, price=won(offer.price), mall=offer.mall)
+        self.say(f"{line}\n(말풍선을 누르면 상품 페이지가 열려요)", "surprised")
+        self._bubble_link = offer.link
+        self.bell()
+
+    def open_price_window(self) -> None:
+        PriceWindow(self, self.watches, self.check_prices_now, lambda: bool(self._price_sources()))
+
+    def open_price_settings(self) -> None:
+        def save(**changes: object) -> None:
+            self._update_settings(**changes)
+            self.check_prices_now()
+
+        PriceSettingsWindow(self, self.settings, save)
 
     # ----- menu actions -----------------------------------------------------------
 

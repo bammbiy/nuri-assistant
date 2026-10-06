@@ -32,20 +32,24 @@ class Persona:
     reminder: str = "{when} '{title}' 일정이 있어요!"
     # Morning briefing opener; the event list follows on the next lines.
     briefing: str = "오늘 일정은 {count}개예요."
+    # Price alert: {title}, {price} like "289,000원", {mall}.
+    price_alert: str = "'{title}' 지금 {price}이에요! ({mall})"
 
-    def system_prompt(self, user_name: str = "", now: str = "", schedule: bool = False) -> str:
+    def system_prompt(self, user_name: str = "", now: str = "", tools: bool = False) -> str:
         who = f"사용자의 이름은 '{user_name}'이다. " if user_name else ""
         when = f"현재 시각은 {now}이다. " if now else ""
-        if schedule:
+        if tools:
             abilities = (
                 "일정 관련 요청(등록, 조회, 취소)에는 반드시 도구를 사용한다. 날짜와 시간은 직접 계산하지 말고 "
                 "사용자가 말한 표현 그대로 도구에 넘긴다. 등록과 취소는 사용자가 화면의 확인 버튼을 눌러야 끝나므로, "
                 "도구를 부른 뒤에는 아래에서 확인해 달라고 캐릭터 말투로 짧게 안내한다. "
                 "도구가 오류를 돌려주면 그 내용을 바탕으로 사용자에게 다시 물어본다. "
                 "조회 결과는 시간 순서대로 짧게 정리해 말한다. "
+                "상품 최저가를 물으면 search_prices로 찾아보고, 최저가가 뜨면 알려 달라고 하면 add_price_watch를 쓴다. "
+                "'30만원'처럼 말한 금액은 원 단위 숫자(300000)로 바꿔 넘긴다. 도구 결과에 없는 가격은 절대 지어내지 않는다. "
             )
         else:
-            abilities = "지금 AI 모델은 일정 기능(도구 호출)을 쓸 수 없어서 일정을 직접 등록하거나 조회할 수 없다. "
+            abilities = "지금 AI 모델은 도구 호출을 쓸 수 없어서 일정 관리나 최저가 알림을 직접 할 수 없다. "
         tags = ", ".join(f"[{expression}]" for expression in EXPRESSIONS)
         return (
             f"너는 '{self.name}'. 일본 애니메이션의 {self.archetype} 캐릭터 같은 성격을 가진, "
@@ -91,6 +95,7 @@ PERSONAS: dict[str, Persona] = {
             look=Look(hair="#c9b3e6", eyes="#6cc9b0", outfit="#f3e6c8", hairstyle="long", accessory="hairpin"),
             reminder="선배, {when} '{title}' 일정이 있어요! 준비하세요~",
             briefing="선배, 오늘 일정은 {count}개예요! 누리가 정리해 왔어요.",
+            price_alert="선배! '{title}' {price}까지 떨어졌어요! ({mall}) 지금이 기회예요!",
         ),
         Persona(
             id="sera",
@@ -117,6 +122,7 @@ PERSONAS: dict[str, Persona] = {
             look=Look(hair="#24202b", eyes="#c0394b", outfit="#17151c", hairstyle="long", accessory="hairpin"),
             reminder="동생, {when} '{title}' 있는 거 알지? 누나가 챙겨 줬어.",
             briefing="오늘 동생 일정은 {count}개야. 누나가 정리해 뒀어.",
+            price_alert="동생, '{title}' {price} 됐어. ({mall}) 누나가 지켜보고 있었지.",
         ),
         Persona(
             id="akane",
@@ -136,6 +142,7 @@ PERSONAS: dict[str, Persona] = {
             look=Look(hair="#d9434b", eyes="#f2a33a", outfit="#2f3e66", hairstyle="twintails", accessory="ribbon"),
             reminder="{when} '{title}' 있잖아! 잊어버리면 안 된다고!",
             briefing="오늘 일정 {count}개야. 흥, 내가 정리해 줬으니까 고마운 줄 알아!",
+            price_alert="'{title}' {price}이야! ({mall}) 흥, 놓치면 바보라고!",
         ),
         Persona(
             id="shizuku",
@@ -152,6 +159,7 @@ PERSONAS: dict[str, Persona] = {
             look=Look(hair="#9fb7d9", eyes="#5b6fd6", outfit="#3a3f4a", hairstyle="short", accessory="hairpin"),
             reminder="...{when} '{title}'. 잊지 마.",
             briefing="...오늘 일정, {count}개.",
+            price_alert="...'{title}', {price}. ({mall}) 살 거면 지금.",
         ),
         Persona(
             id="hinata",
@@ -165,6 +173,7 @@ PERSONAS: dict[str, Persona] = {
             look=Look(hair="#f5a742", eyes="#3fae6a", outfit="#e9f0fb", hairstyle="ponytail", accessory="scrunchie"),
             reminder="{when} '{title}' 있어! 같이 준비하자!",
             briefing="오늘 일정은 {count}개야! 하나씩 해치우자!",
+            price_alert="대박! '{title}' {price}래! ({mall}) 얼른 보러 가자!",
         ),
         Persona(
             id="sakura",
@@ -178,6 +187,7 @@ PERSONAS: dict[str, Persona] = {
             look=Look(hair="#f2a7c3", eyes="#a0527a", outfit="#2b2b36", hairstyle="long", accessory="headdress"),
             reminder="주인님, {when} '{title}' 일정이 있습니다.",
             briefing="주인님, 오늘 일정은 {count}개입니다.",
+            price_alert="주인님, '{title}'이(가) {price}입니다. ({mall})",
         ),
         Persona(
             id="reika",
@@ -191,6 +201,7 @@ PERSONAS: dict[str, Persona] = {
             look=Look(hair="#e8c66a", eyes="#7a3fb0", outfit="#7b2d4f", hairstyle="drills", accessory="tiara"),
             reminder="{when} '{title}' 일정이에요. 늦지 않도록 하세요, 오호호!",
             briefing="오늘 일정은 {count}개랍니다. 우아하게 해치워 볼까요?",
+            price_alert="'{title}'이(가) {price}랍니다. ({mall}) 현명한 소비를 하도록 해요, 오호호!",
         ),
     )
 }

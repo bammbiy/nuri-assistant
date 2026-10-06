@@ -1,23 +1,12 @@
 from __future__ import annotations
 
 import tkinter as tk
-import tkinter.font as tkfont
 from datetime import date, datetime, time, timedelta
 
 from ..schedule import Event, ScheduleStore, format_day
-from .chatbox import ACCENT, ENTRY_FONT, draw_pill
+from .chatbox import draw_pill
+from .theme import ACCENT, BG, CARD, CARD_LINE, DANGER, FONT, SHADOW, SOFT, SUBTLE, TEXT, TODAY, fit as _fit, round_rect as _round_rect
 
-
-BG = "#f6f2fb"
-CARD = "#ffffff"
-CARD_LINE = "#e6ddf4"
-SHADOW = "#ebe4f6"
-TEXT = "#2f2640"
-SUBTLE = "#8a7d9c"
-TODAY = "#3fae94"
-DANGER = "#e06c8a"
-SOFT = "#f1ebfa"
-FONT = ENTRY_FONT[0]
 
 WIDTH = 420
 PAD = 20
@@ -161,17 +150,6 @@ class ScheduleWindow(tk.Toplevel):
         self.canvas.yview_scroll(-2 if up else 2, "units")
 
 
-def _fit(text: str, font: tuple, max_width: int) -> str:
-    """Cut text to one line with an ellipsis so it never runs into the line below."""
-
-    measure = tkfont.Font(font=font).measure
-    if measure(text) <= max_width:
-        return text
-    while text and measure(text + "…") > max_width:
-        text = text[:-1]
-    return text.rstrip() + "…"
-
-
 def _remind_text(event: Event, past: bool) -> str:
     if past:
         return "지난 일정"
@@ -181,11 +159,3 @@ def _remind_text(event: Event, past: bool) -> str:
         return "알림 완료"
     return f"알림 {event.remind_at.strftime('%H:%M')}" if event.remind_at.date() == event.start.date() \
         else f"알림 {event.remind_at.strftime('%m/%d %H:%M')}"
-
-
-def _round_rect(canvas: tk.Canvas, x1: int, y1: int, x2: int, y2: int, r: int, **options: object) -> None:
-    points = (
-        x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r, x2, y2 - r, x2, y2, x2 - r, y2,
-        x1 + r, y2, x1, y2, x1, y2 - r, x1, y1 + r, x1, y1,
-    )
-    canvas.create_polygon(*points, smooth=True, **options)

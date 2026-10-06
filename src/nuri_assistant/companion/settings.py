@@ -19,6 +19,12 @@ class CompanionSettings:
     pick_on_start: bool = True
     # Date (YYYY-MM-DD) of the last morning briefing, so it runs once a day.
     last_briefing: str = ""
+    # Price watching: API keys stay in this local file only.
+    naver_client_id: str = ""
+    naver_client_secret: str = ""
+    coupang_access_key: str = ""
+    coupang_secret_key: str = ""
+    price_check_minutes: int = 60
     x: int | None = None
     y: int | None = None
 

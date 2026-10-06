@@ -4,6 +4,7 @@ from .memory import ConversationStore
 from .personas import DEFAULT_PERSONA_ID, EXPRESSIONS, PERSONAS, Look, Persona, get_persona
 from .reply import ReplyParser
 from .settings import CompanionSettings, load_settings, save_settings
+from .toolbox import ToolBox
 
 __all__ = [
     "DEFAULT_MODEL",
@@ -21,6 +22,7 @@ __all__ = [
     "OllamaToolsUnsupported",
     "Persona",
     "ReplyParser",
+    "ToolBox",
     "ToolCall",
     "get_persona",
     "load_settings",

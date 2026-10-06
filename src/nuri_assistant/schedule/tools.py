@@ -81,6 +81,8 @@ class PendingAction:
 class ScheduleTools:
     """Executes the model's schedule tool calls. Changes only become real via confirm()."""
 
+    specs = TOOL_SPECS
+
     def __init__(self, store: ScheduleStore, clock: Callable[[], datetime] = datetime.now) -> None:
         self.store = store
         self.clock = clock
@@ -137,6 +139,9 @@ class ScheduleTools:
         action = PendingAction("cancel", event.title, event.start, event.all_day, event.remind_at, event.id)
         self.pending.append(action)
         return {"ok": True, "status": "사용자 확인 대기 중 (아직 취소되지 않음)", "title": event.title, "when": event.when}
+
+    def owns(self, action: object) -> bool:
+        return isinstance(action, PendingAction)
 
     def take_pending(self) -> list[PendingAction]:
         pending, self.pending = self.pending, []
