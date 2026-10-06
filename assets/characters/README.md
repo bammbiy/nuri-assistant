@@ -91,10 +91,16 @@ lowres, bad anatomy, bad hands, extra fingers, text, watermark, signature, multi
 
 ## 누리 이미지 현황
 
-`nuri/` 폴더에는 AI로 생성한 캐릭터 시트(`reference_sheet.webp`)에서 잘라 낸 이미지가 들어 있습니다.
+`nuri/` 폴더의 이미지는 AI로 생성한 시트 두 장에서 잘라 만들었습니다.
 
-- `neutral.png`: 상반신, 배경 제거 (rembg `isnet-anime` 모델 사용)
-- `neutral_talk.png`: 입을 벌린 버전 (원본 위에 덧그림)
-- `neutral_blink.png`: 눈을 감은 버전 (원본 위에 덧그림)
+- 원본: `reference_sheet.webp` (기본 표정), `reference_expressions.jpg` (표정 6종)
+- 표정 7종: `neutral`, `happy`, `thinking`, `surprised`, `sad`, `angry`, `shy`
+  - 배경 제거에는 rembg의 `isnet-anime` 모델을 썼습니다.
+  - 두 시트의 캐릭터 크기가 달라서, 눈 위치와 눈 사이 거리를 기준으로 크기와 위치를 맞추고 모두 머리부터 가슴까지로 같은 구도로 잘랐습니다.
+- 덧그린 프레임
+  - 말하는 입: `neutral_talk`, `thinking_talk`, `sad_talk`
+  - 눈 감은 모습: `neutral_blink`
+  - 입을 이미 벌린 표정(기쁨, 놀람, 부끄럼)은 그 자체로 말하는 것처럼 보이므로 따로 만들지 않았습니다.
+- 대답이 끝나고 몇 초가 지나면 기본 표정으로 돌아가, 다시 눈을 깜빡입니다.
 
-나머지 표정(`happy`, `thinking`, `surprised`, `sad`, `angry`, `shy`)은 `reference_sheet.webp`를 img2img 입력으로 넣고, 위의 표정 태그로 얼굴만 인페인팅해서 만들면 같은 캐릭터로 유지됩니다. 원본 해상도가 낮으므로(1024×572), 고해상도로 다시 뽑으면 더 선명해집니다.
+원본 해상도가 낮아서(1024×572) 크게 보면 살짝 흐립니다. 같은 구도로 고해상도 시트를 다시 뽑으면 똑같은 방식으로 다시 잘라 넣을 수 있습니다.

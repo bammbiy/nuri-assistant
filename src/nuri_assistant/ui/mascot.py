@@ -33,7 +33,7 @@ WIDTH = 360
 CHAR_TOP = 200
 CANVAS_HEIGHT = 540
 # Images may rise behind the bubble area so a bust-up drawing is shown large.
-CHAR_BOX = (WIDTH - 20, CANVAS_HEIGHT - 130)
+CHAR_BOX = (WIDTH - 10, CANVAS_HEIGHT - 130)
 # Windows keys this exact color out of the window. A near-black key keeps
 # anti-aliased PNG edges looking like line art instead of a colored halo.
 TRANSPARENT_KEY = "#010203"
@@ -55,6 +55,9 @@ class MascotApp(tk.Tk):
         self.companion = self._make_companion()
 
         self.expression = "neutral"
+        self.head_top = CHAR_TOP
+        self._bubble_text = ""
+        self._relax_token = 0
         self.talking = False
         self.mouth_open = False
         self.blinking = False
@@ -113,7 +116,7 @@ class MascotApp(tk.Tk):
         self.canvas.tag_bind("character", "<ButtonPress-1>", self._on_press)
         self.canvas.tag_bind("character", "<B1-Motion>", self._on_drag)
         self.canvas.tag_bind("character", "<ButtonRelease-1>", self._on_release)
-        self.canvas.tag_bind("bubble", "<Button-1>", lambda _event: self._hide_bubble())
+        self.canvas.tag_bind("bubble", "<Button-1>", lambda _event: self._show_bubble(""))
         self.canvas.bind("<Button-3>", self._show_menu)
         if sys.platform == "darwin":
             self.canvas.bind("<Button-2>", self._show_menu)
@@ -242,13 +245,19 @@ class MascotApp(tk.Tk):
         mouth = self.talking and self.mouth_open
         image, has_expression = self._image_for(self.expression, mouth, self.blinking)
         if image is None:
+            head_top = CHAR_TOP
             draw_placeholder(self.canvas, WIDTH // 2, CHAR_TOP, self.persona.look, self.expression, mouth, self.blinking)
         else:
+            top = CANVAS_HEIGHT - image.height()
+            head_top = top + 12
             self.canvas.delete("character")
             self.canvas.create_image(WIDTH // 2, CANVAS_HEIGHT, anchor="s", image=image, tags="character")
             if not has_expression:
-                top = CANVAS_HEIGHT - image.height()
                 draw_emote(self.canvas, WIDTH // 2 + int(image.width() * 0.3), top + int(image.height() * 0.2), self.expression)
+        if head_top != self.head_top:
+            # Art of a different height: keep the bubble tail touching the head.
+            self.head_top = head_top
+            self._show_bubble(self._bubble_text)
         self.canvas.tag_raise("bubble")
 
     def set_expression(self, expression: str) -> None:
@@ -285,16 +294,34 @@ class MascotApp(tk.Tk):
     def say(self, text: str, expression: str | None = None) -> None:
         if expression:
             self.set_expression(expression)
+            self._relax_later(6000 + min(len(text) * 60, 9000))
         self._show_bubble(text)
+
+    def _relax_later(self, delay_ms: int) -> None:
+        """Return to the neutral face a while after speaking, so moods do not stick."""
+
+        self._relax_token += 1
+        token = self._relax_token
+
+        def relax() -> None:
+            if token != self._relax_token:
+                return
+            if self.busy:
+                self._relax_later(2000)
+            else:
+                self.set_expression("neutral")
+
+        self.after(delay_ms, relax)
 
     def _hide_bubble(self) -> None:
         self.canvas.delete("bubble")
 
     def _show_bubble(self, text: str) -> None:
         self._hide_bubble()
+        self._bubble_text = text
         if not text:
             return
-        cx, bottom = WIDTH // 2, CHAR_TOP - 18
+        cx, bottom = WIDTH // 2, self.head_top - 18
         item = self.canvas.create_text(cx, bottom, text=text, width=WIDTH - 60, anchor="s", font=BUBBLE_FONT,
                                        fill="#2b2233", justify="left", tags="bubble")
         # Long replies keep their latest part visible; the full text is in the chat log.
@@ -305,9 +332,10 @@ class MascotApp(tk.Tk):
         x1, y1, x2, y2 = self.canvas.bbox(item)
         pad = 12
         self._rounded_rect(x1 - pad, y1 - pad, x2 + pad, y2 + pad, 16)
-        self.canvas.create_polygon(cx + 10, y2 + pad - 2, cx + 34, y2 + pad - 2, cx + 18, CHAR_TOP + 4,
+        # Tail sits at the center so it stays inside even a one-character bubble.
+        self.canvas.create_polygon(cx - 9, y2 + pad - 2, cx + 9, y2 + pad - 2, cx + 3, self.head_top + 4,
                                    fill="#ffffff", outline="", tags="bubble")
-        self.canvas.create_line(cx + 10, y2 + pad, cx + 18, CHAR_TOP + 4, cx + 34, y2 + pad,
+        self.canvas.create_line(cx - 9, y2 + pad, cx + 3, self.head_top + 4, cx + 9, y2 + pad,
                                 fill="#8a7a9e", width=2, tags="bubble")
         self.canvas.tag_raise(item)
 
