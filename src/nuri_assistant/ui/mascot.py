@@ -25,7 +25,7 @@ from ..schedule import Event, PendingAction, ScheduleStore, ScheduleTools
 from ..storage import HistoryStore
 from .assistant import AssistantWindow
 from .desktop import APP_DIR, DB_PATH, NuriAssistantApp
-from .chatbox import HEIGHT as CHAT_HEIGHT, ChatBox, subject_particle
+from .chatbox import HEIGHT as CHAT_HEIGHT, ChatBox, draw_pill, subject_particle
 from .confirm_card import HEIGHT as CARD_HEIGHT, ConfirmCard
 from .picker import CharacterPicker
 from .placeholder import PLACEHOLDER_HEIGHT, draw_emote, draw_placeholder
@@ -54,6 +54,10 @@ NO_WORDS = {"아니", "아니요", "아뇨", "ㄴㄴ", "ㄴ", "취소", "됐어"
 TRANSPARENT_KEY = "#010203"
 FALLBACK_BG = "#f3eff7"
 BUBBLE_FONT = ("Malgun Gothic", 11) if sys.platform == "win32" else ("TkDefaultFont", 11)
+BUBBLE_TEXT = "#2f2640"
+BUBBLE_LINE = "#c9b6ea"
+BUBBLE_SHADOW = "#e7def5"
+BUBBLE_PLATE = "#9b7fdc"
 
 
 class MascotApp(tk.Tk):
@@ -364,30 +368,36 @@ class MascotApp(tk.Tk):
         self._bubble_text = text
         if not text:
             return
+        canvas = self.canvas
         cx, bottom = WIDTH // 2, self.head_top - 18
-        item = self.canvas.create_text(cx, bottom, text=text, width=WIDTH - 60, anchor="s", font=BUBBLE_FONT,
-                                       fill="#2b2233", justify="left", tags="bubble")
+        item = canvas.create_text(cx, bottom, text=text, width=WIDTH - 64, anchor="s", font=BUBBLE_FONT,
+                                  fill=BUBBLE_TEXT, justify="left", tags="bubble")
         # Long replies keep their latest part visible; the full text is in the chat log.
         shown = text
-        while self.canvas.bbox(item)[1] < 16 and len(shown) > 20:
+        while canvas.bbox(item)[1] < 34 and len(shown) > 20:
             shown = shown[max(len(shown) // 10, 1):]
-            self.canvas.itemconfigure(item, text="…" + shown.lstrip())
-        x1, y1, x2, y2 = self.canvas.bbox(item)
-        pad = 12
-        self._rounded_rect(x1 - pad, y1 - pad, x2 + pad, y2 + pad, 16)
-        # Tail sits at the center so it stays inside even a one-character bubble.
-        self.canvas.create_polygon(cx - 9, y2 + pad - 2, cx + 9, y2 + pad - 2, cx + 3, self.head_top + 4,
-                                   fill="#ffffff", outline="", tags="bubble")
-        self.canvas.create_line(cx - 9, y2 + pad, cx + 3, self.head_top + 4, cx + 9, y2 + pad,
-                                fill="#8a7a9e", width=2, tags="bubble")
-        self.canvas.tag_raise(item)
+            canvas.itemconfigure(item, text="…" + shown.lstrip())
 
-    def _rounded_rect(self, x1: int, y1: int, x2: int, y2: int, r: int) -> None:
-        points = (
-            x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r, x2, y2 - r, x2, y2, x2 - r, y2,
-            x1 + r, y2, x1, y2, x1, y2 - r, x1, y1 + r, x1, y1,
-        )
-        self.canvas.create_polygon(*points, smooth=True, fill="#ffffff", outline="#8a7a9e", width=2, tags="bubble")
+        # Visual-novel style name plate on the top-left edge.
+        plate = canvas.create_text(0, 0, text=self.persona.name, font=(BUBBLE_FONT[0], 9, "bold"), fill="#ffffff", tags="bubble")
+        plate_w = canvas.bbox(plate)[2] - canvas.bbox(plate)[0] + 22
+        x1, y1, x2, y2 = canvas.bbox(item)
+        pad_x, pad_top, pad_bottom = 16, 16, 12
+        bx1, by1, bx2, by2 = x1 - pad_x, y1 - pad_top, x2 + pad_x, y2 + pad_bottom
+        if bx2 - bx1 < plate_w + 40:
+            grow = (plate_w + 40 - (bx2 - bx1)) // 2 + 1
+            bx1, bx2 = bx1 - grow, bx2 + grow
+
+        _round_rect(canvas, bx1, by1 + 3, bx2, by2 + 3, 16, fill=BUBBLE_SHADOW, outline="", tags="bubble")
+        canvas.create_polygon(cx - 9, by2 - 2, cx + 9, by2 - 2, cx + 3, self.head_top + 4,
+                              fill="#ffffff", outline=BUBBLE_LINE, width=2, tags="bubble")
+        _round_rect(canvas, bx1, by1, bx2, by2, 16, fill="#ffffff", outline=BUBBLE_LINE, width=2, tags="bubble")
+        # Open the outline where the tail joins the bubble.
+        canvas.create_line(cx - 7, by2, cx + 8, by2, fill="#ffffff", width=3, tags="bubble")
+        draw_pill(canvas, bx1 + 14, by1 - 11, bx1 + 14 + plate_w, by1 + 11, fill=BUBBLE_PLATE, tags="bubble")
+        canvas.coords(plate, bx1 + 14 + plate_w / 2, by1)
+        canvas.tag_raise(plate)
+        canvas.tag_raise(item)
 
     # ----- conversation -----------------------------------------------------------
 
@@ -640,3 +650,11 @@ def _until(event: Event, now: datetime) -> str:
         return f"{minutes}분 뒤에"
     hours, rest = divmod(minutes, 60)
     return f"{hours}시간 {rest}분 뒤에" if rest else f"{hours}시간 뒤에"
+
+
+def _round_rect(canvas: tk.Canvas, x1: float, y1: float, x2: float, y2: float, r: int, **options: object) -> None:
+    points = (
+        x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r, x2, y2 - r, x2, y2, x2 - r, y2,
+        x1 + r, y2, x1, y2, x1, y2 - r, x1, y1 + r, x1, y1,
+    )
+    canvas.create_polygon(*points, smooth=True, **options)
