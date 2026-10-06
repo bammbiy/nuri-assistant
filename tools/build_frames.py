@@ -37,7 +37,16 @@ CHARACTERS = {
             blink=((1363.3, 1439.5, 335.6, 386.3), (1500.0, 1582.0, 335.6, 386.3)), skin=(1471, 363),
         ),
         # Full-body figure on the left of the base sheet: cut box, figure top/bottom, eyes.
-        full=dict(crop=(100, 0, 680, 1116), top=131, bottom=1089, mid=(369.5, 195), dist=59),
+        full=dict(crop=(100, 0, 680, 1116), top=131, bottom=1089, mid=(369.5, 195), dist=59,
+                  # Shy's mouth sits lower and its sleeve cuffs reach the mouth corners: use a
+                  # lower, wider mouth area and paint the cuff lace/outlines in it with skin.
+                  # Polygons are in eye-distance units relative to the eye midpoint.
+                  mouth={"shy": (0.34, 0.36, 0.88)},
+                  cover={"shy": [
+                      [(-0.42, 0.58), (-0.15, 0.6), (-0.15, 0.76), (-0.06, 0.9), (-0.42, 0.9)],
+                      [(0.27, 0.6), (0.42, 0.6), (0.42, 0.9), (0.12, 0.9), (0.2, 0.79), (0.27, 0.74)],
+                      [(-0.42, 0.82), (0.42, 0.82), (0.42, 0.95), (-0.42, 0.95)],
+                  ]}),
         expressions=dict(
             sheet="reference_expressions.webp", dist=89,
             columns=((0, 690), (690, 1300), (1300, 2000)), rows=((0, 560), (560, 1116)),
@@ -57,6 +66,11 @@ CHARACTERS = {
             blink=((1366, 1442, 330, 374), (1505, 1584, 330, 374)), skin="ring", lash=3.4, feather=2.4,
         ),
         full=dict(crop=(120, 0, 620, 1116), top=52, bottom=1096, mid=(372, 189), dist=52),
+        # Background removal left a faint gray haze around the dark hair (ahoge tip):
+        # drop alpha below the floor and stretch the rest so edges end crisply.
+        # Semi-transparent pixels brighter than haze_lum are background haze (the hair's real
+        # edges are dark), so they are dropped too.
+        alpha=dict(floor=60, gain=1.35, haze_lum=75),
         expressions=dict(
             # 2000x1117 upscale of the original 1024x572 sheet; coordinates scaled by ~1.953.
             sheet="reference_expressions.webp", dist=82,
@@ -84,13 +98,24 @@ def place(img, mid, k):
 def to_out(p, mid, k):
     return ((p[0] - mid[0]) * k + EYE_OUT[0], (p[1] - mid[1]) * k + EYE_OUT[1])
 
-def clean(img, fade=40):
+def harden(img, floor, gain, haze_lum=None):
+    a = np.array(img)
+    alpha = a[..., 3].astype(float)
+    if haze_lum is not None:
+        haze = (alpha < 200) & (a[..., :3].mean(-1) > haze_lum)
+        alpha[haze] = 0
+    a[..., 3] = np.clip((alpha - floor) * gain * 255 / (255 - floor), 0, 255).astype(np.uint8)
+    return Image.fromarray(a)
+
+def clean(img, fade=40, alpha_fix=None):
+    if alpha_fix:
+        img = harden(img, **alpha_fix)
     a = np.array(img)
     alpha = a[..., 3]
     labels, n = ndimage.label(alpha > 40)
     if n:
         sizes = ndimage.sum(np.ones_like(alpha), labels, range(1, n + 1))
-        keep = ndimage.binary_dilation(labels == (np.argmax(sizes) + 1), iterations=2)
+        keep = ndimage.binary_dilation(labels == (np.argmax(sizes) + 1), iterations=4)
         alpha[~keep] = 0
     ramp = np.linspace(1, 0, fade) ** 1.5
     alpha[H - fade:] = (alpha[H - fade:] * ramp[:, None]).astype(np.uint8)
@@ -153,6 +178,8 @@ def build_full(config, folder, session, frames, out):
     sheet = Image.open(folder / config["base"]["sheet"]).convert("RGB")
     ox, oy = full["crop"][:2]
     figure = remove(sheet.crop(full["crop"]), session=session).convert("RGBA")
+    if config.get("alpha"):
+        figure = harden(figure, **config["alpha"])
     k = FULL_FIGURE_H / (full["bottom"] - full["top"])
     eye = ((full["mid"][0] - ox) * k, (full["mid"][1] - oy) * k)
     # Center horizontally on the eyes, feet a few pixels above the frame bottom.
@@ -167,17 +194,44 @@ def build_full(config, folder, session, frames, out):
     # Brows+eyes band plus a small mouth oval: wide enough for the expression, but it
     # stops short of the chin and cheeks where bust poses put hands and sleeves.
     d, (ex, ey) = config["eye_px"], EYE_OUT
-    mask = Image.new("L", (W, H), 0)
-    draw = ImageDraw.Draw(mask)
-    draw.ellipse([ex - 1.0 * d, ey - 0.6 * d, ex + 1.0 * d, ey + 0.5 * d], fill=255)
-    draw.ellipse([ex - 0.36 * d, ey + 0.32 * d, ex + 0.36 * d, ey + 0.86 * d], fill=255)
-    mask = mask.filter(ImageFilter.GaussianBlur(d * 0.07))
+
+    def cover(frame, polygons, oval):
+        """Paint the given regions with the median skin tone found in the mouth oval."""
+        a = np.array(frame).copy()
+        region = Image.new("L", (W, H), 0)
+        draw = ImageDraw.Draw(region)
+        for polygon in polygons:
+            draw.polygon([(ex + x * d, ey + y * d) for x, y in polygon], fill=255)
+        covered = np.array(region) > 0
+        rgb = a[..., :3].astype(int)
+        saturation, lum = rgb.max(-1) - rgb.min(-1), rgb.mean(-1)
+        skin = (np.array(oval) > 0) & ~covered & (saturation >= 33) & (saturation < 90) & (lum > 185)
+        if skin.any():
+            a[covered, :3] = np.median(rgb[skin], axis=0).astype(np.uint8)
+            a[covered, 3] = 255
+        return Image.fromarray(a)
+
+    def face_mask(frame_name, frame):
+        expression = frame_name.split("_")[0]
+        half, top, bottom = full.get("mouth", {}).get(expression, (0.36, 0.32, 0.86))
+        band = Image.new("L", (W, H), 0)
+        ImageDraw.Draw(band).ellipse([ex - 1.0 * d, ey - 0.6 * d, ex + 1.0 * d, ey + 0.5 * d], fill=255)
+        mouth = Image.new("L", (W, H), 0)
+        ImageDraw.Draw(mouth).ellipse([ex - half * d, ey + top * d, ex + half * d, ey + bottom * d], fill=255)
+        mask = Image.fromarray(np.maximum(np.array(band), np.array(mouth)))
+        return mask.filter(ImageFilter.GaussianBlur(d * 0.07))
 
     out = out / "full"
     out.mkdir(parents=True, exist_ok=True)
     for frame_name, frame in frames.items():
         face = frame.copy()
-        face.putalpha(Image.composite(face.getchannel("A"), Image.new("L", face.size, 0), mask))
+        expression = frame_name.split("_")[0]
+        if expression in full.get("cover", {}):
+            half, top, bottom = full["mouth"][expression]
+            oval = Image.new("L", (W, H), 0)
+            ImageDraw.Draw(oval).ellipse([ex - half * d, ey + top * d, ex + half * d, ey + bottom * d], fill=255)
+            face = cover(face, full["cover"][expression], oval)
+        face.putalpha(Image.composite(face.getchannel("A"), Image.new("L", face.size, 0), face_mask(frame_name, frame)))
         size = (round(W * face_k), round(H * face_k))
         small = face.convert("RGBa").resize(size, Image.LANCZOS).convert("RGBA")
         result = base.copy()
@@ -228,7 +282,7 @@ def build(name, out):
             frames[f"{expression}_talk"] = talk(frames[expression], to_out((mx - x0, my - y0), mid, k), size)
 
     out.mkdir(parents=True, exist_ok=True)
-    cleaned = {frame: clean(img) for frame, img in frames.items()}
+    cleaned = {frame: clean(img, alpha_fix=config.get("alpha")) for frame, img in frames.items()}
     for frame, img in cleaned.items():
         img.save(out / f"{frame}.png", optimize=True)
     if "full" in config:
