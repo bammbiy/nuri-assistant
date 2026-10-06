@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import hashlib
-import hmac
 import io
 import json
 import tempfile
 import unittest
-from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError
 
 from src.nuri_assistant.companion import ToolBox
 from src.nuri_assistant.pricewatch import (
-    CoupangPartners, NaverShopping, Offer, PriceChecker, PriceSourceError, PriceTools, WatchStore,
+    NaverShopping, Offer, PriceChecker, PriceSourceError, PriceTools, WatchStore,
     fetch_page_price, relevant,
 )
 from src.nuri_assistant.pricewatch.tools import _price
@@ -56,23 +53,6 @@ class SourcesTest(unittest.TestCase):
 
         with self.assertRaisesRegex(PriceSourceError, "인증"):
             NaverShopping("id", "bad", opener).search("x")
-
-    def test_coupang_signature_and_parsing(self) -> None:
-        seen: list = []
-        payload = {"rCode": "0", "data": {"productData": [
-            {"productName": "애플 에어팟 프로 2세대", "productPrice": 279000, "productUrl": "https://link.coupang.com/x", "productId": 9, "isRocket": True},
-        ]}}
-        clock = lambda: datetime(2026, 10, 6, 5, 30, 0, tzinfo=timezone.utc)
-        source = CoupangPartners("AK", "SK", opener_returning(payload, seen), clock=clock)
-
-        offers = source.search("에어팟 프로")
-
-        self.assertEqual(offers[0].price, 279000)
-        self.assertEqual(offers[0].mall, "쿠팡 로켓배송")
-        header = seen[0].get_header("Authorization")
-        query = "keyword=%EC%97%90%EC%96%B4%ED%8C%9F%20%ED%94%84%EB%A1%9C&limit=10"
-        expected = hmac.new(b"SK", f"261006T053000ZGET{CoupangPartners.PATH}{query}".encode(), hashlib.sha256).hexdigest()
-        self.assertEqual(header, f"CEA algorithm=HmacSHA256, access-key=AK, signed-date=261006T053000Z, signature={expected}")
 
     def test_page_price_from_json_ld_and_meta(self) -> None:
         ld = b'<html><head><meta property="og:title" content="Nice Mouse"><script type="application/ld+json">{"@type":"Product","offers":{"@type":"Offer","price":"39,900"}}</script></head></html>'

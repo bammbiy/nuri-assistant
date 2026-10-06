@@ -23,7 +23,7 @@ from ..companion import (
     save_settings,
 )
 from ..companion import ToolBox
-from ..pricewatch import CheckResult, CoupangPartners, NaverShopping, PriceChecker, PriceTools, WatchAction, WatchStore, won
+from ..pricewatch import CheckResult, NaverShopping, PriceChecker, PriceTools, WatchAction, WatchStore, won
 from ..schedule import Event, PendingAction, ScheduleStore, ScheduleTools
 from ..storage import HistoryStore
 from .assistant import AssistantWindow
@@ -560,8 +560,6 @@ class MascotApp(tk.Tk):
         settings, sources = self.settings, []
         if settings.naver_client_id and settings.naver_client_secret:
             sources.append(NaverShopping(settings.naver_client_id, settings.naver_client_secret))
-        if settings.coupang_access_key and settings.coupang_secret_key:
-            sources.append(CoupangPartners(settings.coupang_access_key, settings.coupang_secret_key))
         return sources
 
     def _price_loop(self) -> None:

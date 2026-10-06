@@ -13,7 +13,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "search_prices",
-            "description": "상품의 현재 최저가를 찾아볼 때 호출한다 (네이버 쇼핑/쿠팡 등). 결과에 없는 가격은 지어내지 않는다.",
+            "description": "상품의 현재 최저가를 찾아볼 때 호출한다 (네이버 쇼핑). 결과에 없는 가격은 지어내지 않는다.",
             "parameters": {
                 "type": "object",
                 "properties": {"query": {"type": "string", "description": "상품 이름. 예: 에어팟 프로 2세대"}},

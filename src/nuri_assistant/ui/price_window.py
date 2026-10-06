@@ -104,7 +104,7 @@ class PriceWindow(tk.Toplevel):
         if not self.has_source():
             self.notice.configure(text="API 키가 없어서 상품 링크 감시만 돼요. 메뉴의 '가격 알림 설정'에서 네이버 쇼핑 키를 넣어 주세요.", fg=DANGER)
         else:
-            self.notice.configure(text="이름으로 등록하면 네이버 쇼핑(설정 시 쿠팡 포함)에서 최저가를 찾아요.", fg=SUBTLE)
+            self.notice.configure(text="이름으로 등록하면 네이버 쇼핑에서 최저가를 찾아요. 링크로 등록하면 그 페이지 가격을 봐요.", fg=SUBTLE)
 
     def _check_clicked(self) -> None:
         self.check_now()

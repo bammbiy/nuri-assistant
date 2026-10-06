@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-import hashlib
-import hmac
 import html
 import json
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode, urlparse
+from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 
 
@@ -91,43 +88,6 @@ class NaverShopping:
             if price > 0:
                 offers.append(Offer(_clean_title(item.get("title", "")), price, item.get("mallName") or "네이버",
                                     item.get("link", ""), str(item.get("productId", ""))))
-        return offers
-
-
-class CoupangPartners:
-    """쿠팡 파트너스 Open API product search (needs an approved partners account)."""
-
-    name = "쿠팡"
-    HOST = "https://api-gateway.coupang.com"
-    PATH = "/v2/providers/affiliate_open_api/apis/openapi/products/search"
-
-    def __init__(self, access_key: str, secret_key: str, opener: Opener = _default_opener,
-                 clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)) -> None:
-        self.access_key, self.secret_key, self.opener, self.clock = access_key.strip(), secret_key.strip(), opener, clock
-
-    def authorization(self, method: str, path: str, query: str) -> str:
-        signed_date = self.clock().strftime("%y%m%dT%H%M%SZ")
-        message = f"{signed_date}{method}{path}{query}"
-        signature = hmac.new(self.secret_key.encode(), message.encode(), hashlib.sha256).hexdigest()
-        return f"CEA algorithm=HmacSHA256, access-key={self.access_key}, signed-date={signed_date}, signature={signature}"
-
-    def search(self, query: str, limit: int = 10) -> list[Offer]:
-        params = f"keyword={quote(query)}&limit={limit}"
-        request = Request(
-            f"{self.HOST}{self.PATH}?{params}",
-            headers={"Authorization": self.authorization("GET", self.PATH, params), "Content-Type": "application/json;charset=UTF-8"},
-        )
-        data = _read_json(self.opener, request, self.name)
-        products = (data.get("data") or {}).get("productData") or []
-        offers = []
-        for item in products:
-            try:
-                price = int(item.get("productPrice") or 0)
-            except (TypeError, ValueError):
-                continue
-            if price > 0:
-                mall = "쿠팡 로켓배송" if item.get("isRocket") else "쿠팡"
-                offers.append(Offer(item.get("productName", ""), price, mall, item.get("productUrl", ""), str(item.get("productId", ""))))
         return offers
 
 

@@ -9,7 +9,6 @@ from .theme import ACCENT_DARK, BG, FONT, SUBTLE, TEXT, button, entry
 
 
 NAVER_GUIDE = "https://developers.naver.com/apps/#/register"
-COUPANG_GUIDE = "https://partners.coupang.com/"
 
 
 class PriceSettingsWindow(tk.Toplevel):
@@ -29,13 +28,12 @@ class PriceSettingsWindow(tk.Toplevel):
         tk.Label(body, text="키는 이 PC의 설정 파일에만 저장돼요.", font=(FONT, 9), bg=BG, fg=SUBTLE).pack(anchor="w", pady=(2, 14))
 
         self.fields: dict[str, tk.Entry] = {}
-        self._section(body, "네이버 쇼핑 검색 API (추천, 무료)", NAVER_GUIDE,
+        self._section(body, "네이버 쇼핑 검색 API (무료)", NAVER_GUIDE,
                       "developers.naver.com에서 애플리케이션 등록 → '검색' API 선택 → Client ID/Secret 복사")
         self._field(body, "naver_client_id", "Client ID", settings.naver_client_id)
         self._field(body, "naver_client_secret", "Client Secret", settings.naver_client_secret, secret=True)
-        self._section(body, "쿠팡 파트너스 API (선택)", COUPANG_GUIDE, "쿠팡 파트너스 가입·승인 후 Open API 키 발급")
-        self._field(body, "coupang_access_key", "Access Key", settings.coupang_access_key)
-        self._field(body, "coupang_secret_key", "Secret Key", settings.coupang_secret_key, secret=True)
+        tk.Label(body, text="상품 링크로 등록한 알림은 키 없이도 동작해요 (가격 정보를 공개하는 쇼핑몰만).",
+                 font=(FONT, 9), bg=BG, fg=SUBTLE, wraplength=420, justify="left").pack(anchor="w", pady=(6, 0))
 
         row = tk.Frame(body, bg=BG)
         row.pack(fill="x", pady=(14, 0))
