@@ -29,9 +29,10 @@ CHARACTERS = {
     "nuri": dict(
         eye_px=0.767 * 89,  # output eye distance; every character uses this to share one scale
         base=dict(
-            sheet="reference_sheet.webp", crop=(520, 0, 1000, 572), mid=(752, 184.5), dist=64,
-            talk=((754.5, 224), (10, 8)),  # mouth center and size in sheet px
-            blink=((698, 737, 172, 198), (768, 810, 172, 198)), skin=(753, 186),
+            # 2000x1116 upscale of the original 1024x572 sheet; coordinates scaled by ~1.953.
+            sheet="reference_sheet.webp", crop=(1016, 0, 1953, 1116), mid=(1468.8, 360.0), dist=125,
+            talk=((1473.6, 437.0), (19.5, 15.6)),  # mouth center and size in sheet px
+            blink=((1363.3, 1439.5, 335.6, 386.3), (1500.0, 1582.0, 335.6, 386.3)), skin=(1471, 363),
         ),
         expressions=dict(
             sheet="reference_expressions.webp", dist=89,

@@ -94,7 +94,7 @@ lowres, bad anatomy, bad hands, extra fingers, text, watermark, signature, multi
 
 `nuri/` 폴더의 이미지는 AI로 생성한 시트 두 장에서 잘라 만들었습니다.
 
-- 원본: `reference_sheet.webp` (기본 표정, 1024×572), `reference_expressions.webp` (표정 6종, 2000×1116 고화질)
+- 원본: `reference_sheet.webp` (기본 표정, 1024×572 시트를 2000×1116으로 업스케일), `reference_expressions.webp` (표정 6종, 2000×1116)
 - 표정 7종: `neutral`, `happy`, `thinking`, `surprised`, `sad`, `angry`, `shy`
   - 배경 제거에는 rembg의 `isnet-anime` 모델을 썼습니다.
   - 두 시트의 캐릭터 크기가 달라서, 눈 위치와 눈 사이 거리를 기준으로 크기와 위치를 맞추고 모두 머리부터 가슴까지로 같은 구도로 잘랐습니다.
@@ -104,7 +104,7 @@ lowres, bad anatomy, bad hands, extra fingers, text, watermark, signature, multi
   - 입을 이미 벌린 표정(기쁨, 놀람, 부끄럼)은 그 자체로 말하는 것처럼 보이므로 따로 만들지 않았습니다.
 - 대답이 끝나고 몇 초가 지나면 기본 표정으로 돌아가, 다시 눈을 깜빡입니다.
 
-표정 6종은 고화질 시트에서 잘랐지만, 기본 표정은 아직 저해상도 시트(1024×572)에서 잘라서 상대적으로 흐립니다. 기본 표정도 고화질로 다시 뽑으면 같은 방식으로 다시 잘라 넣을 수 있습니다.
+이제 기본 표정과 표정 6종 모두 고화질 시트에서 잘라 냅니다.
 
 이 이미지들은 아래 명령으로 다시 만들 수 있습니다. 시트를 새로 뽑았다면, `tools/build_frames.py`의 `CHARACTERS` 설정에 적힌 자르는 위치와 눈 위치를 먼저 새로 재야 합니다.
 
