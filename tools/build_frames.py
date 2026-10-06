@@ -36,17 +36,13 @@ CHARACTERS = {
             talk=((1473.6, 437.0), (19.5, 15.6)),  # mouth center and size in sheet px
             blink=((1363.3, 1439.5, 335.6, 386.3), (1500.0, 1582.0, 335.6, 386.3)), skin=(1471, 363),
         ),
-        # Full-body figure on the left of the base sheet: cut box, figure top/bottom, eyes.
+        # Full-body figure on the left of the base sheet: cut box, figure top/bottom, eyes
+        # (iris centers, measured at 10x; nose, mouth and chin must sit at the same multiples
+        # of the eye distance as on the bust, or the pasted face will not line up).
+        # face: oval bounding the pasted face, in eye-distance units (half width, top, bottom);
+        # per-expression bottoms stop above a hand at the chin (Nuri's pen).
         full=dict(crop=(100, 0, 680, 1116), top=131, bottom=1089, mid=(369.5, 195), dist=59,
-                  # Shy's mouth sits lower and its sleeve cuffs reach the mouth corners: use a
-                  # lower, wider mouth area and paint the cuff lace/outlines in it with skin.
-                  # Polygons are in eye-distance units relative to the eye midpoint.
-                  mouth={"shy": (0.34, 0.36, 0.88)},
-                  cover={"shy": [
-                      [(-0.42, 0.58), (-0.15, 0.6), (-0.15, 0.76), (-0.06, 0.9), (-0.42, 0.9)],
-                      [(0.27, 0.6), (0.42, 0.6), (0.42, 0.9), (0.12, 0.9), (0.2, 0.79), (0.27, 0.74)],
-                      [(-0.42, 0.82), (0.42, 0.82), (0.42, 0.95), (-0.42, 0.95)],
-                  ]}),
+                  face=dict(oval=(0.9, -0.55, 0.98), bottom={"thinking": 0.85})),
         expressions=dict(
             sheet="reference_expressions.webp", dist=89,
             columns=((0, 690), (690, 1300), (1300, 2000)), rows=((0, 560), (560, 1116)),
@@ -54,6 +50,10 @@ CHARACTERS = {
                       sad=(388, 778), angry=(1000, 779), shy=(1600, 775.5)),
             # Closed mouths get a talking frame (center in sheet px, size in output px);
             # open ones (happy, surprised, shy) already read as speech.
+            # Head size/position fix after eye alignment: (scale, dx, dy) in output px, found by
+            # overlaying each frame's hair silhouette and face skin on neutral (best IoU).
+            adjust=dict(happy=(1.045, 0, -2), thinking=(1.055, 4.5, 0), surprised=(1.03, 1.5, 0),
+                        sad=(0.97, 1.5, -2), angry=(0.96, 1.5, -0.5), shy=(0.955, -1.5, -4.5)),
             talk=dict(thinking=((1001.5, 297), (10, 8)), sad=((388, 835.5), (10, 8))),
         ),
     ),
@@ -65,7 +65,9 @@ CHARACTERS = {
             talk=((1472.5, 434), (19.5, 15.6)),
             blink=((1366, 1442, 330, 374), (1505, 1584, 330, 374)), skin="ring", lash=3.4, feather=2.4,
         ),
-        full=dict(crop=(120, 0, 620, 1116), top=52, bottom=1096, mid=(372, 189), dist=52),
+        # Iris centers measured at 10x; dist fits nose, mouth and chin to the bust proportions.
+        full=dict(crop=(120, 0, 620, 1116), top=52, bottom=1096, mid=(371.5, 190), dist=50,
+                  face=dict(oval=(0.9, -0.55, 1.0), bottom={"thinking": 0.9, "angry": 0.95})),
         # Background removal left a faint gray haze around the dark hair (ahoge tip):
         # drop alpha below the floor and stretch the rest so edges end crisply.
         # Semi-transparent pixels brighter than haze_lum are background haze (the hair's real
@@ -77,6 +79,10 @@ CHARACTERS = {
             columns=((8, 664), (671, 1329), (1337, 1992)), rows=((4, 556), (562, 1113)),
             mids=dict(happy=(347.7, 212.9), thinking=(1014.8, 213.3), surprised=(1665.2, 213.3),
                       sad=(338.9, 773.3), angry=(1008.8, 773.3), shy=(1676.3, 773.3)),
+            # Head size/position fix after eye alignment: (scale, dx, dy) in output px, found by
+            # overlaying each frame's hair silhouette and face skin on neutral (best IoU).
+            adjust=dict(happy=(1.0, 2, 2), thinking=(1.02, 5.5, 2.5), surprised=(1.005, -1.5, 2),
+                        sad=(1.005, -2.5, 2), angry=(1.005, 0, 0), shy=(1.0, 3.5, 0)),
             talk=dict(thinking=((1008.8, 263.6), (12, 9)), sad=((343.8, 826.0), (12, 9))),
         ),
     ),
@@ -89,13 +95,9 @@ CHARACTERS = {
         ),
         # erase: sheet boxes where semi-transparent leftovers of the background (a sticky note
         # and the board edge beside the hair) are dropped; the opaque hair stays.
-        # face: the full-body face has the bust face's proportions (eyes, nose, mouth, chin all
-        # line up at one scale), so the whole face is replaced, outline included, instead of
-        # mixing bust eyes with the sheet's own nose and chin. Oval in eye-distance units
-        # (half width, top, bottom); thinking stops above the chin where the bust hand is.
         full=dict(crop=(170, 60, 580, 1116), top=87, bottom=1099, mid=(373, 184.5), dist=49.5,
                   erase=((420, 60, 580, 240),),
-                  face=dict(oval=(1.0, -0.55, 1.05), bottom={"thinking": 0.92})),
+                  face=dict(oval=(1.0, -0.55, 1.25), bottom={"thinking": 0.92})),
         expressions=dict(
             sheet="reference_expressions.webp",
             # Rows stop above the Korean/English labels printed under each face.
@@ -105,6 +107,10 @@ CHARACTERS = {
             # The panels are not drawn at one scale (and closed or narrowed eyes sit wider apart),
             # so each has its own eye distance, calibrated by head height against the neutral.
             dist=dict(happy=77, thinking=79, surprised=81, sad=90, angry=91, shy=90),
+            # Head size/position fix after eye alignment: (scale, dx, dy) in output px, found by
+            # overlaying each frame's hair silhouette and face skin on neutral (best IoU).
+            adjust=dict(happy=(0.965, 1.5, -1.5), thinking=(1.0, 4.5, -1), surprised=(0.995, 6, -1),
+                        sad=(1.05, -3, 5.5), angry=(1.05, 4, 7), shy=(1.02, 0, 6)),
             talk=dict(thinking=((1001, 278), (11, 8)), sad=((390, 830), (11, 8)), angry=((1000, 833), (11, 8))),
         ),
     ),
@@ -241,9 +247,10 @@ def ring_color(img, box):
 def build_full(config, folder, session, frames, out):
     """Full-body frames: the sheet's full-body figure with each bust frame's face pasted on.
 
-    Faces are scaled by eye distance and aligned on the eyes, then blended through a
-    feathered oval that covers brows to chin, so expressions, talking and blinking carry
-    over. Hand gestures exist only in the bust art and are left out.
+    The full-body face has the bust face's proportions, so each bust frame's whole face
+    (bangs and eyes, then the skin with eyes, nose, mouth and blush) is scaled by eye
+    distance and aligned on the eyes. Talking and blinking carry over; hair, headset arms,
+    hands and sleeves around the face come from the full-body figure.
     """
     full = config["full"]
     sheet = Image.open(folder / config["base"]["sheet"]).convert("RGB")
@@ -269,35 +276,28 @@ def build_full(config, folder, session, frames, out):
     eye_full = (eye[0] - round(left), eye[1] - round(top))
 
     face_k = full["dist"] * k / config["eye_px"]
-    # Brows+eyes band plus a small mouth oval: wide enough for the expression, but it
-    # stops short of the chin and cheeks where bust poses put hands and sleeves.
     d, (ex, ey) = config["eye_px"], EYE_OUT
 
-    def cover(frame, polygons, oval):
-        """Paint the given regions with the median skin tone found in the mouth oval."""
-        a = np.array(frame).copy()
-        region = Image.new("L", (W, H), 0)
-        draw = ImageDraw.Draw(region)
-        for polygon in polygons:
-            draw.polygon([(ex + x * d, ey + y * d) for x, y in polygon], fill=255)
-        covered = np.array(region) > 0
-        rgb = a[..., :3].astype(int)
-        saturation, lum = rgb.max(-1) - rgb.min(-1), rgb.mean(-1)
-        skin = (np.array(oval) > 0) & ~covered & (saturation >= 33) & (saturation < 90) & (lum > 185)
-        if skin.any():
-            a[covered, :3] = np.median(rgb[skin], axis=0).astype(np.uint8)
-            a[covered, 3] = 255
-        return Image.fromarray(a)
-
-    def face_mask(frame_name, frame):
-        expression = frame_name.split("_")[0]
-        half, top, bottom = full.get("mouth", {}).get(expression, (0.36, 0.32, 0.86))
-        band = Image.new("L", (W, H), 0)
-        ImageDraw.Draw(band).ellipse([ex - 1.0 * d, ey - 0.6 * d, ex + 1.0 * d, ey + 0.5 * d], fill=255)
-        mouth = Image.new("L", (W, H), 0)
-        ImageDraw.Draw(mouth).ellipse([ex - half * d, ey + top * d, ex + half * d, ey + bottom * d], fill=255)
-        blur = ImageFilter.GaussianBlur(d * 0.07)
-        return band.filter(blur), mouth.filter(blur)
+    def face_shape(frame, oval):
+        """The face itself inside the oval: bangs and eyes above the cheekbones, below that only
+        the skin blob with its holes (eyes, mouth, tears) filled. Hair, headset arms, sleeves
+        and hands that reach in from the edge stay out, so the full-body figure's own show."""
+        a = np.array(frame).astype(int)
+        r, g, b, alpha = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
+        # Warm and light, but not yellowish cream (Nuri's shy sleeves reach the mouth).
+        cream = (g - b >= 12) & (r - g < 18)
+        skin = (alpha > 200) & (r - b > 6) & (r >= g) & ((r + g + b) / 3 > 150) & ~cream & oval
+        skin = ndimage.binary_opening(skin, iterations=1)
+        labels, _ = ndimage.label(skin)
+        seed = labels[int(ey + 0.45 * d), int(ex)]
+        if seed:
+            skin = labels == seed
+        skin = ndimage.binary_fill_holes(ndimage.binary_closing(skin, iterations=2))
+        yy = np.arange(H)[:, None]
+        upper = oval & (yy < ey + 0.3 * d)
+        # Shrunk a little so outlines along the edge (sleeve cuffs, the jaw) come from the
+        # full-body figure, which draws the jaw in the same place.
+        return ndimage.binary_erosion(skin, iterations=2) | upper
 
     def masked(img, mask):
         img = img.copy()
@@ -307,23 +307,14 @@ def build_full(config, folder, session, frames, out):
     out = out / "full"
     out.mkdir(parents=True, exist_ok=True)
     for frame_name, frame in frames.items():
-        face = frame.copy()
         expression = frame_name.split("_")[0]
-        if expression in full.get("cover", {}):
-            half, top, bottom = full["mouth"][expression]
-            oval = Image.new("L", (W, H), 0)
-            ImageDraw.Draw(oval).ellipse([ex - half * d, ey + top * d, ex + half * d, ey + bottom * d], fill=255)
-            face = cover(face, full["cover"][expression], oval)
+        half, top, bottom = full["face"]["oval"]
+        bottom = full["face"].get("bottom", {}).get(expression, bottom)
+        oval = Image.new("L", (W, H), 0)
+        ImageDraw.Draw(oval).ellipse([ex - half * d, ey + top * d, ex + half * d, ey + bottom * d], fill=255)
+        mask = Image.fromarray(face_shape(frame, np.array(oval) > 0).astype(np.uint8) * 255)
+        face = masked(frame, mask.filter(ImageFilter.GaussianBlur(1.2)))
         result = base.copy()
-        if "face" in full:
-            half, top, bottom = full["face"]["oval"]
-            bottom = full["face"].get("bottom", {}).get(expression, bottom)
-            mask = Image.new("L", (W, H), 0)
-            ImageDraw.Draw(mask).ellipse([ex - half * d, ey + top * d, ex + half * d, ey + bottom * d], fill=255)
-            face = masked(face, mask.filter(ImageFilter.GaussianBlur(d * 0.08)))
-        else:
-            band, mouth = face_mask(frame_name, frame)
-            face = masked(face, Image.fromarray(np.maximum(np.array(band), np.array(mouth))))
         size = (round(W * face_k), round(H * face_k))
         small = face.convert("RGBa").resize(size, Image.LANCZOS).convert("RGBA")
         result.alpha_composite(small, (round(eye_full[0] - EYE_OUT[0] * face_k), round(eye_full[1] - EYE_OUT[1] * face_k)))
@@ -368,6 +359,9 @@ def build(name, out):
         (x0, x1), (y0, y1) = exp["columns"][index % 3], exp["rows"][index // 3]
         panel = remove(sheet.crop((x0, y0, x1, y1)), session=session).convert("RGBA")
         mid = (exp["mids"][expression][0] - x0, exp["mids"][expression][1] - y0)
+        scale, dx, dy = exp.get("adjust", {}).get(expression, (1, 0, 0))
+        k *= scale
+        mid = (mid[0] - dx / k, mid[1] - dy / k)
         frames[expression] = place(panel, mid, k)
         if expression in exp["talk"]:
             (mx, my), size = exp["talk"][expression]
