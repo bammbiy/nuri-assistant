@@ -18,7 +18,7 @@ python src/run_nuri.py --classic  # 파일 정리 도구만
 python -m unittest discover -s tests                         # 저장소 루트에서 (테스트는 src.nuri_assistant 로 import)
 python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 75개 통과)
 python -m pyflakes src tests tools
-python tools/build_frames.py nuri|sera [출력폴더]              # 캐릭터 프레임 재생성 (pillow numpy scipy rembg onnxruntime 필요)
+python tools/build_frames.py nuri|sera|yuki [출력폴더]              # 캐릭터 프레임 재생성 (pillow numpy scipy rembg onnxruntime 필요)
 ```
 
 - Python 3.11 이상. 앱 실행에 외부 패키지는 필요 없습니다. Pillow는 선택(있으면 썸네일 축소가 부드러움).
@@ -31,7 +31,7 @@ python tools/build_frames.py nuri|sera [출력폴더]              # 캐릭터 �
 
 ```text
 src/nuri_assistant/
-├── companion/   personas(캐릭터 7명: 성격·말투·대사 틀·기본 목소리), llm(Ollama 스트리밍+도구 호출),
+├── companion/   personas(캐릭터 8명: 성격·말투·대사 틀·기본 목소리), llm(Ollama 스트리밍+도구 호출),
 │                brain(모델→도구→모델 루프 최대 4회, 대화 기억, 일본어 번역), reply(표정 태그·<think>·<ja> 처리),
 │                memory(캐릭터별 대화), settings(companion.json), toolbox(도구 묶음 라우팅)
 ├── schedule/    timeparse(한국어 날짜 해석), store, tools(add/list/cancel_event)
@@ -86,6 +86,7 @@ tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터�
 |---|---|---|---|---|---|
 | nuri | 누리 | 다정한 후배 비서 (기본) | 선배 | 상반신+전신 | 春日部つむぎ (8) |
 | sera | 세라 | 어른스러운 누나 비서 | 동생 | 상반신+전신 | 九州そら セクシー (17) |
+| yuki | 유키 | 나긋나긋한 힐링계 | 자기 | 상반신+전신 | WhiteCUL ノーマル (23) |
 | akane | 아카네 | 츤데레 | 너 | 도형 임시 | 四国めたん ツンツン (6) |
 | shizuku | 시즈쿠 | 쿠데레 | 너 | 도형 임시 | 冥鳴ひまり (14) |
 | hinata | 히나타 | 활발한 소꿉친구 | 너 | 도형 임시 | 雨晴はう (10) |
@@ -97,13 +98,12 @@ tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터�
 캐릭터 추가 절차:
 1. `companion/personas.py`의 `PERSONAS`에 `Persona` 추가 (대사 틀, `voice_id`, 임시 그림 색 포함).
 2. 그림: 기본 시트(왼쪽 전신·오른쪽 큰 상반신)와 3×2 표정 시트를 `assets/characters/<id>/`에 두고, `tools/build_frames.py`의 `CHARACTERS`에 좌표를 적습니다. 좌표는 원본을 확대한 좌표 격자 이미지를 보고 손으로 잽니다(눈 사이 중점·거리, 입 중심, 눈 상자, 전신 머리끝·발끝). 업스케일한 시트는 배치가 같으면 기존 좌표에 배율만 곱하면 됩니다. 자세한 규격과 생성 프롬프트는 `assets/characters/README.md`.
-3. 프레임 결과를 확대해서 꼭 눈으로 확인합니다(소매·손 조각, 배경 번짐). 문제는 설정(`cover`, `mouth`, `alpha`)으로 고치고, 손으로 이미지를 고치지 않습니다.
+3. 프레임 결과를 확대해서 꼭 눈으로 확인합니다(표정끼리 머리 크기·위치, 소매·손 조각, 배경 번짐, 이름표 글자). 문제는 설정으로 고치고, 손으로 이미지를 고치지 않습니다: 표정별 크기는 `dist`를 표정별 dict로, 이름표는 `rows`로 끊기, 소매·손은 `cover`/`mouth`, 번짐은 `alpha`, 전신 주변 잔상은 `full["erase"]`, 홍조 있는 얼굴의 눈 감기는 `skin="lerp"`.
 4. 배경 제거(rembg)는 실행마다 아주 약간 결과가 달라질 수 있으니, 고친 캐릭터의 프레임만 교체합니다.
 
 ## 남은 일
 
 - 실제 PC(Windows)에서 종합 확인: Ollama 도구 호출, VOICEVOX 음성과 기본 목소리 id, 네이버 API(쿠팡 상품 포함 여부), 투명 배경, 고배율 화면
-- 백발 캐릭터 추가 (사용자 시트 대기 중)
 - 파일 정리 기능을 대화 도구로 연결 (미리보기·확인 카드 재사용)
 - 대화 기록 창을 파스텔 디자인으로 교체
 - 나머지 5명 캐릭터 그림

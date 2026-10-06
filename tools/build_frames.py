@@ -80,6 +80,29 @@ CHARACTERS = {
             talk=dict(thinking=((1008.8, 263.6), (12, 9)), sad=((343.8, 826.0), (12, 9))),
         ),
     ),
+    "yuki": dict(
+        eye_px=0.767 * 89,
+        base=dict(
+            sheet="reference_sheet.webp", crop=(1040, 0, 1960, 1116), mid=(1467.5, 346.5), dist=125,
+            talk=((1472, 437), (21, 15.6)),
+            blink=((1358, 1442, 328, 368), (1498, 1584, 322, 362)), skin="lerp", lash=3.0, feather=1.5,
+        ),
+        # erase: sheet boxes where semi-transparent leftovers of the background (a sticky note
+        # and the board edge beside the hair) are dropped; the opaque hair stays.
+        full=dict(crop=(170, 60, 580, 1116), top=87, bottom=1099, mid=(371.5, 182), dist=47,
+                  erase=((420, 60, 580, 240),)),
+        expressions=dict(
+            sheet="reference_expressions.webp",
+            # Rows stop above the Korean/English labels printed under each face.
+            columns=((60, 690), (700, 1320), (1330, 1960)), rows=((40, 470), (590, 965)),
+            mids=dict(happy=(397, 219), thinking=(1001.5, 220.5), surprised=(1602.5, 228),
+                      sad=(387.5, 770), angry=(1001, 772), shy=(1596, 772)),
+            # The panels are not drawn at one scale (and closed or narrowed eyes sit wider apart),
+            # so each has its own eye distance, calibrated by head height against the neutral.
+            dist=dict(happy=77, thinking=79, surprised=81, sad=90, angry=91, shy=90),
+            talk=dict(thinking=((1001, 278), (11, 8)), sad=((390, 830), (11, 8)), angry=((1000, 833), (11, 8))),
+        ),
+    ),
 }
 
 def place(img, mid, k):
@@ -107,9 +130,8 @@ def harden(img, floor, gain, haze_lum=None):
     a[..., 3] = np.clip((alpha - floor) * gain * 255 / (255 - floor), 0, 255).astype(np.uint8)
     return Image.fromarray(a)
 
-def clean(img, fade=40, alpha_fix=None):
-    if alpha_fix:
-        img = harden(img, **alpha_fix)
+def largest(img):
+    """Keep only the biggest opaque blob (drops sheet decorations rembg left behind)."""
     a = np.array(img)
     alpha = a[..., 3]
     labels, n = ndimage.label(alpha > 40)
@@ -117,6 +139,13 @@ def clean(img, fade=40, alpha_fix=None):
         sizes = ndimage.sum(np.ones_like(alpha), labels, range(1, n + 1))
         keep = ndimage.binary_dilation(labels == (np.argmax(sizes) + 1), iterations=4)
         alpha[~keep] = 0
+    return Image.fromarray(a)
+
+def clean(img, fade=40, alpha_fix=None):
+    if alpha_fix:
+        img = harden(img, **alpha_fix)
+    a = np.array(largest(img))
+    alpha = a[..., 3]
     ramp = np.linspace(1, 0, fade) ** 1.5
     alpha[H - fade:] = (alpha[H - fade:] * ramp[:, None]).astype(np.uint8)
     a[..., 3] = alpha
@@ -148,12 +177,49 @@ def blink(img, eyes, skin, lash=2.2, feather=1.2):
     which blends better with eyelid shading.
     """
     out = img
+    if skin == "lerp":
+        return lerp_blink(img, eyes, lash, feather)
     for (ex0, ex1, ytop, ybot) in eyes:
         color = skin if skin != "ring" else ring_color(img, (ex0, ytop, ex1, ybot))
         def fn(d, p, ex0=ex0, ex1=ex1, ytop=ytop, ybot=ybot, color=color):
             d.ellipse([*p(ex0 + 1, ytop + 2), *p(ex1 - 1, ybot + 1)], fill=color)
             d.arc([*p(ex0 + 1, ytop + 1), *p(ex1 - 1, ybot - 1)], 20, 160, fill=(70, 45, 60, 255), width=int(lash * SS))
         out = edit(out, (ex0 - 2, ytop - 2, ex1 + 2, ybot + 4), fn, soft_mask=True, feather=feather)
+    return out
+
+def lerp_blink(img, eyes, lash, feather):
+    """Close the eyes by filling each eye oval row by row with a blend of the skin just left
+    and right of it. Follows blush and shading gradients that a flat color would not."""
+    a = np.array(img).astype(float)
+    for (ex0, ex1, ytop, ybot) in eyes:
+        cx, cy, rx, ry = (ex0 + ex1) / 2, (ytop + ybot) / 2 + 1, (ex1 - ex0) / 2 + 1, (ybot - ytop) / 2 + 2
+        fill = a.copy()
+        rows = []
+        for y in range(int(cy - ry), int(cy + ry) + 2):
+            half = rx * np.sqrt(max(0.0, 1 - ((y - cy) / ry) ** 2))
+            if half >= 1:
+                xl, xr = int(np.floor(cx - half)) - 2, int(np.ceil(cx + half)) + 2
+                rows.append((y, xl, xr, a[y, xl - 2:xl + 1, :3].mean(0), a[y, xr:xr + 3, :3].mean(0)))
+        # Lash wings and hair also sit beside the eye: a sample that is not light, warm skin
+        # (dark lashes, gray-white hair) takes the nearest skin row's.
+        for side in (3, 4):
+            good = [i for i, row in enumerate(rows) if row[side].mean() > 200 and row[side][0] - row[side][2] > 6]
+            for i, row in enumerate(rows):
+                if good and i not in good:
+                    nearest = min(good, key=lambda j: abs(j - i))
+                    rows[i] = row[:side] + (rows[nearest][side],) + row[side + 1:]
+        for y, xl, xr, left, right in rows:
+            t = np.linspace(0, 1, xr - xl + 1)[:, None]
+            fill[y, xl:xr + 1, :3] = left * (1 - t) + right * t
+        mask = Image.new("L", img.size, 0)
+        ImageDraw.Draw(mask).ellipse([cx - rx, cy - ry, cx + rx, cy + ry], fill=255)
+        m = np.array(mask.filter(ImageFilter.GaussianBlur(feather)))[..., None] / 255
+        a = a * (1 - m) + fill * m
+    out = Image.fromarray(a.clip(0, 255).astype(np.uint8))
+    for (ex0, ex1, ytop, ybot) in eyes:
+        def fn(d, p, ex0=ex0, ex1=ex1, ytop=ytop, ybot=ybot):
+            d.arc([*p(ex0 + 1, ytop + 1), *p(ex1 - 1, ybot - 1)], 20, 160, fill=(70, 45, 60, 255), width=int(lash * SS))
+        out = edit(out, (ex0 - 2, ytop - 2, ex1 + 2, ybot + 4), fn)
     return out
 
 def ring_color(img, box):
@@ -180,6 +246,13 @@ def build_full(config, folder, session, frames, out):
     figure = remove(sheet.crop(full["crop"]), session=session).convert("RGBA")
     if config.get("alpha"):
         figure = harden(figure, **config["alpha"])
+    if full.get("erase"):
+        a = np.array(figure)
+        for x0, y0, x1, y1 in full["erase"]:
+            box = a[y0 - oy:y1 - oy, x0 - ox:x1 - ox]
+            box[box[..., 3] < 200] = 0
+        figure = Image.fromarray(a)
+    figure = largest(figure)
     k = FULL_FIGURE_H / (full["bottom"] - full["top"])
     eye = ((full["mid"][0] - ox) * k, (full["mid"][1] - oy) * k)
     # Center horizontally on the eyes, feet a few pixels above the frame bottom.
@@ -257,8 +330,8 @@ def build(name, out):
     frames["neutral"] = neutral
     (mouth, (mw, mh)) = base["talk"]
     frames["neutral_talk"] = talk(neutral, to_out(shift(mouth), mid, k), (mw * k, mh * k))
-    if base["skin"] == "ring":
-        skin = "ring"
+    if base["skin"] in ("ring", "lerp"):
+        skin = base["skin"]
     else:
         sx, sy = shift(base["skin"])
         skin = tuple(int(v) for v in np.array(rgb)[sy, sx]) + (255,)
@@ -271,8 +344,9 @@ def build(name, out):
     # Expressions: one panel each from the 3x2 expression sheet.
     exp = config["expressions"]
     sheet = Image.open(folder / exp["sheet"]).convert("RGB")
-    k = config["eye_px"] / exp["dist"]
     for index, expression in enumerate(EXPRESSION_ORDER):
+        dist = exp["dist"][expression] if isinstance(exp["dist"], dict) else exp["dist"]
+        k = config["eye_px"] / dist
         (x0, x1), (y0, y1) = exp["columns"][index % 3], exp["rows"][index // 3]
         panel = remove(sheet.crop((x0, y0, x1, y1)), session=session).convert("RGBA")
         mid = (exp["mids"][expression][0] - x0, exp["mids"][expression][1] - y0)

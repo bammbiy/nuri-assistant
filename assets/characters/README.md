@@ -13,6 +13,7 @@
 |---|---|---|
 | `nuri` | 누리 | 다정한 후배 비서 (기본 캐릭터), 라일락→민트 웨이브 머리 |
 | `sera` | 세라 | 어른스러운 누나 비서, 검은 긴 생머리 |
+| `yuki` | 유키 | 나긋나긋한 힐링계 비서, 백발 웨이브 장발 |
 | `akane` | 아카네 | 츤데레, 빨간 트윈테일 |
 | `shizuku` | 시즈쿠 | 쿠데레, 은청색 단발 |
 | `hinata` | 히나타 | 활발한 소꿉친구, 주황 포니테일 |
@@ -110,7 +111,7 @@ lowres, bad anatomy, bad hands, extra fingers, text, watermark, signature, multi
 
 ```bash
 pip install pillow numpy scipy rembg onnxruntime
-python tools/build_frames.py nuri   # 세라는 sera
+python tools/build_frames.py nuri   # 세라는 sera, 유키는 yuki
 ```
 
 ## 세라 이미지 현황
@@ -120,6 +121,17 @@ python tools/build_frames.py nuri   # 세라는 sera
 - 원본: `reference_sheet.webp` (기본 표정, 2000×1116), `reference_expressions.webp` (표정 6종, 1024×572 시트를 2000×1117로 업스케일)
 - 말하는 입: `neutral_talk`, `thinking_talk`, `sad_talk`. 화남은 삐친 입 모양이라 입 벌린 그림을 덧그리면 어색해서 만들지 않았습니다.
 - 눈 감은 모습: `neutral_blink`
+
+## 유키 이미지 현황
+
+`yuki/` 폴더도 같은 방식으로 만들었습니다 (`python tools/build_frames.py yuki`).
+
+- 원본: `reference_sheet.webp`, `reference_expressions.webp` (둘 다 2000×1116)
+- 표정 시트의 칸마다 얼굴 크기가 달라서, 표정별로 눈 사이 거리를 따로 적었습니다(`dist`가 표정별 값). 머리 꼭대기 높이를 기본 표정과 맞추는 방식으로 쟀습니다.
+- 칸 아래 한글·영어 이름표가 프레임에 들어오지 않게 자르는 줄(`rows`)을 이름표 위에서 끊었습니다.
+- 말하는 입: `neutral_talk`, `thinking_talk`, `sad_talk`, `angry_talk`
+- 눈 감은 모습은 눈 양옆 피부색을 줄마다 이어 칠하는 방식(`skin="lerp"`)입니다. 볼 홍조가 있는 그림은 한 가지 색으로 덮으면 눈 자리에 얼룩이 보여서입니다.
+- 전신: 머리 옆에 붙은 포스트잇과 배경판의 반투명 잔상을 `erase` 범위에서 지웁니다(불투명한 머리카락은 남음).
 
 ## 새 캐릭터 시트 뽑는 요령 (잘라 넣기 쉬운 형식)
 
@@ -178,7 +190,7 @@ lowres, worst quality, bad quality, bad anatomy, bad hands, extra fingers, text,
 
 ## 전신 프레임 (`full/`)
 
-`nuri/full/`, `sera/full/`에는 전신 모드용 프레임(405×480)이 들어 있습니다. `python tools/build_frames.py <id>`가 상반신 프레임과 함께 만듭니다.
+`nuri/full/`, `sera/full/`, `yuki/full/`에는 전신 모드용 프레임(405×480)이 들어 있습니다. `python tools/build_frames.py <id>`가 상반신 프레임과 함께 만듭니다.
 
 - 기본 시트 왼쪽의 전신 그림을 잘라 배경을 지우고, 키가 462px이 되게 줄입니다.
 - 표정 7종, 말하는 입, 눈 깜빡임은 상반신 프레임에서 **얼굴(눈썹·눈 띠와 입 주변)만** 떼어 눈 위치에 맞춰 붙입니다. 턱과 볼은 잘라 내서, 상반신 표정의 손동작(턱에 손, 볼 감싸기)은 전신에 따라오지 않습니다.
