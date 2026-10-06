@@ -90,8 +90,16 @@ CHARACTERS = {
         # erase: sheet boxes where semi-transparent leftovers of the background (a sticky note
         # and the board edge beside the hair) are dropped; the opaque hair stays.
         full=dict(crop=(170, 60, 580, 1116), top=87, bottom=1099, mid=(371.5, 182), dist=47,
-                  erase=((420, 60, 580, 240),), mouth_shift=(0.15, 0.05),
-                  mouth={e: (0.42, 0.34, 0.92) for e in ("neutral", "happy", "thinking", "surprised", "sad", "angry", "shy")}),
+                  erase=((420, 60, 580, 240),),
+                  # The full-body face is not a smaller copy of the bust face (its eyes are
+                  # smaller and set wider apart), so each eye and the mouth are pasted on
+                  # their own, sized by the feature's width in both drawings.
+                  parts=(
+                      dict(kind="blink", src=(1405, 350), dst=(348.5, 185), scale=0.32, oval=(62, 38, 58)),
+                      dict(kind="blink", src=(1530, 343), dst=(398, 184.5), scale=0.32, oval=(62, 38, 58)),
+                      # Stops above the bust chin line, which would otherwise show as a second chin.
+                      dict(kind="talk", src=(1472, 436), dst=(376, 217.5), scale=0.40, oval=(48, 28, 34)),
+                  )),
         expressions=dict(
             sheet="reference_expressions.webp",
             # Rows stop above the Korean/English labels printed under each face.
@@ -300,6 +308,32 @@ def build_full(config, folder, session, frames, out):
         img.putalpha(Image.composite(img.getchannel("A"), Image.new("L", img.size, 0), mask))
         return img
 
+    bust = config["base"]
+    k_bust = config["eye_px"] / bust["dist"]
+    bust_mid = bust["mid"]
+    to_full = lambda p: ((p[0] - ox) * k - round(left), (p[1] - oy) * k - round(top))
+
+    def paste_part(result, face, part):
+        """Paste one feature (an eye with its lid and cheek, or the mouth) from a bust frame.
+
+        `src` is the feature in base-sheet px, `dst` the same feature on the full-body figure,
+        `scale` full-sheet px per base-sheet px (from the feature's width in both drawings),
+        `oval` the patch as (half width, up, down) in base-sheet px around `src`.
+        """
+        cx, cy = to_out(part["src"], bust_mid, k_bust)
+        rx, up, down = (v * k_bust for v in part["oval"])
+        mask = Image.new("L", (W, H), 0)
+        ImageDraw.Draw(mask).ellipse([cx - rx, cy - up, cx + rx, cy + down], fill=255)
+        mask = mask.filter(ImageFilter.GaussianBlur(min(rx, up, down) * 0.25))
+        patch = masked(face, mask)
+        s = part["scale"] / k_bust * k
+        small = patch.convert("RGBa").resize((round(W * s), round(H * s)), Image.LANCZOS).convert("RGBA")
+        tx, ty = to_full(part["dst"])
+        x, y = round(tx - cx * s), round(ty - cy * s)
+        canvas = Image.new("RGBA", (result.width + 2 * small.width, result.height + 2 * small.height), (0, 0, 0, 0))
+        canvas.alpha_composite(small, (x + small.width, y + small.height))
+        result.alpha_composite(canvas.crop((small.width, small.height, small.width + result.width, small.height + result.height)))
+
     out = out / "full"
     out.mkdir(parents=True, exist_ok=True)
     for frame_name, frame in frames.items():
@@ -310,21 +344,19 @@ def build_full(config, folder, session, frames, out):
             oval = Image.new("L", (W, H), 0)
             ImageDraw.Draw(oval).ellipse([ex - half * d, ey + top * d, ex + half * d, ey + bottom * d], fill=255)
             face = cover(face, full["cover"][expression], oval)
-        band, mouth = face_mask(frame_name, frame)
-        if "mouth_shift" in full:
-            # The full-body face is turned slightly, so its mouth sits off the eye midline:
-            # move the bust mouth there (eye-distance units) so it replaces the drawn one.
-            dx, dy = (round(v * d) for v in full["mouth_shift"])
-            shifted = Image.new("RGBA", face.size, (0, 0, 0, 0))
-            shifted.alpha_composite(masked(face, mouth), (max(dx, 0), max(dy, 0)), (max(-dx, 0), max(-dy, 0)))
-            face = masked(face, band)
-            face.alpha_composite(shifted)
-        else:
-            face = masked(face, Image.fromarray(np.maximum(np.array(band), np.array(mouth))))
-        size = (round(W * face_k), round(H * face_k))
-        small = face.convert("RGBa").resize(size, Image.LANCZOS).convert("RGBA")
         result = base.copy()
-        result.alpha_composite(small, (round(eye_full[0] - EYE_OUT[0] * face_k), round(eye_full[1] - EYE_OUT[1] * face_k)))
+        if "parts" in full:
+            # The sheet's own full-body face is the neutral one: neutral frames only swap in
+            # what changes (closed eyes when blinking, the mouth when talking).
+            for part in full["parts"]:
+                if expression != "neutral" or frame_name.endswith(f"_{part['kind']}"):
+                    paste_part(result, face, part)
+        else:
+            band, mouth = face_mask(frame_name, frame)
+            face = masked(face, Image.fromarray(np.maximum(np.array(band), np.array(mouth))))
+            size = (round(W * face_k), round(H * face_k))
+            small = face.convert("RGBa").resize(size, Image.LANCZOS).convert("RGBA")
+            result.alpha_composite(small, (round(eye_full[0] - EYE_OUT[0] * face_k), round(eye_full[1] - EYE_OUT[1] * face_k)))
         result.save(out / f"{frame_name}.png", optimize=True)
 
 
