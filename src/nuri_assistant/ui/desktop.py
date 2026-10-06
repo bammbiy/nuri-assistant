@@ -34,16 +34,16 @@ RULE_PRESETS = {
 STATUS_FILTERS = ("전체", "ready", "conflict", "error", "skip")
 
 
-class NuriAssistantApp(tk.Tk):
-    def __init__(self) -> None:
-        super().__init__()
+class NuriAssistantApp(tk.Toplevel):
+    def __init__(self, master: tk.Misc | None = None, history: HistoryStore | None = None) -> None:
+        super().__init__(master)
         self.title("Nuri Assistant")
         self.geometry("1180x760")
         self.minsize(1040, 640)
         self.rowconfigure(4, weight=1)
         self.columnconfigure(0, weight=1)
 
-        self.history = HistoryStore(DB_PATH)
+        self.history = history or HistoryStore(DB_PATH)
         self.files: list[Path] = []
         self.profiles = load_profiles(PROFILES_PATH)
 
@@ -333,7 +333,7 @@ class NuriAssistantApp(tk.Tk):
             title="미리보기 CSV 저장",
             defaultextension=".csv",
             filetypes=[("CSV files", "*.csv")],
-            initialfile="nf-file-engine-preview.csv",
+            initialfile="nuri-preview.csv",
         )
         if not output:
             return
@@ -404,4 +404,10 @@ class NuriAssistantApp(tk.Tk):
 
 
 def run() -> None:
-    NuriAssistantApp().mainloop()
+    """Open only the file rename tool, without the desktop character."""
+
+    root = tk.Tk()
+    root.withdraw()
+    app = NuriAssistantApp(root)
+    app.protocol("WM_DELETE_WINDOW", root.destroy)
+    root.mainloop()

@@ -1,3 +1,4 @@
-from .desktop import NFFileEngineApp, run
+from .desktop import NuriAssistantApp, run
+from .mascot import MascotApp, run_mascot
 
-__all__ = ["NFFileEngineApp", "run"]
+__all__ = ["MascotApp", "NuriAssistantApp", "run", "run_mascot"]

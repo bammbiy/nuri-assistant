@@ -1,5 +1,35 @@
 # Nuri Assistant
 
+## 데스크톱 캐릭터 비서
+
+`python src/run_nuri.py`를 실행하면 바탕화면 위에 애니메이션풍 캐릭터가 항상 떠 있습니다. 아래 입력창으로 말을 걸면 내 PC에서 돌아가는 AI(Ollama)가 캐릭터 말투로 대답합니다. 대화 내용은 인터넷으로 나가지 않습니다.
+
+- 캐릭터 5명: 아카네(츤데레), 시즈쿠(쿠데레), 히나타(활발한 소꿉친구), 사쿠라(메이드), 레이카(오죠사마)
+- 답변 내용에 따라 표정이 바뀝니다 (기본, 웃음, 생각, 놀람, 슬픔, 화남, 부끄럼). 말하는 동안 입이 움직이고, 가끔 눈을 깜빡입니다.
+- 대화는 캐릭터별로 `~/.nuri-assistant/companion.sqlite3`에 저장되고, 최근 대화를 기억한 채 이어서 말합니다.
+- 캐릭터를 드래그하면 위치를 옮길 수 있고, 클릭하면 반응합니다. 위치는 저장됩니다.
+- 오른쪽 클릭이나 `≡` 버튼으로 메뉴를 엽니다: 캐릭터 변경, 내 이름 설정, AI 모델 설정, 대화 기록, 기억 지우기, 파일 정리 도구, 종료
+- 캐릭터 그림을 넣기 전에는 도형으로 그린 임시 캐릭터가 나옵니다. 그림 넣는 법과 AI 생성 프롬프트는 [assets/characters/README.md](assets/characters/README.md)에 있습니다.
+- 아직은 대화만 할 수 있습니다. 일정 관리나 파일 정리 같은 작업을 캐릭터가 직접 실행하는 기능은 다음 단계에서 붙입니다.
+
+### Ollama 준비 (최초 1회)
+
+1. https://ollama.com 에서 Windows용 Ollama를 설치합니다. 설치하면 백그라운드에서 자동 실행됩니다.
+2. 터미널에서 모델을 받습니다. 기본 모델은 RTX 3060 Ti(8GB VRAM)에 맞춘 `qwen3:8b`입니다.
+
+```powershell
+ollama pull qwen3:8b
+```
+
+3. 앱을 실행합니다.
+
+```powershell
+python src/run_nuri.py           # 캐릭터 비서
+python src/run_nuri.py --classic # 캐릭터 없이 파일 정리 도구만
+```
+
+다른 모델을 쓰려면 메뉴의 `AI 모델 설정`에서 이름을 바꿉니다. 예를 들어 한국어에 강한 `exaone3.5:7.8b`도 8GB VRAM에 들어갑니다. 설정은 `~/.nuri-assistant/companion.json`에 저장됩니다.
+
 ## Assistant Mode
 
 Nuri Assistant combines file organization and purchase decisions in one review-first desktop workflow.
@@ -116,7 +146,7 @@ python src/run_nuri.py
 ## 테스트
 
 ```bash
-cd nf-file-engine
+cd nuri-assistant
 python -m unittest discover -s tests
 ```
 
@@ -129,6 +159,13 @@ nuri-assistant/
 │   ├── run_nuri.py
 │   └── nuri_assistant/
 │       ├── __init__.py
+│       ├── companion/
+│       │   ├── brain.py
+│       │   ├── llm.py
+│       │   ├── memory.py
+│       │   ├── personas.py
+│       │   ├── reply.py
+│       │   └── settings.py
 │       ├── core/
 │       │   ├── export.py
 │       │   ├── models.py
@@ -143,8 +180,15 @@ nuri-assistant/
 │       │   ├── history.py
 │       │   └── profiles.py
 │       └── ui/
-│           └── desktop.py
+│           ├── assistant.py
+│           ├── desktop.py
+│           ├── mascot.py
+│           └── placeholder.py
+├── assets/
+│   └── characters/
+│       └── README.md
 └── tests/
+    ├── test_companion.py
     └── test_nuri_assistant.py
 ```
 
@@ -157,7 +201,8 @@ nuri-assistant/
 - `core.scanner`: 폴더 내 문서/이미지 파일 스캔
 - `metadata`: 파일명에서 날짜, 매체코드, 페이지를 추론하는 규칙
 - `storage`: SQLite 히스토리 저장소, 배치 단위 이력, 작업 프로필
-- `ui`: Tkinter 데스크톱 화면
+- `companion`: 캐릭터 설정(페르소나), 로컬 Ollama 연결, 표정 태그 해석, 대화 기억, 설정 저장
+- `ui`: Tkinter 데스크톱 화면 (`mascot.py`: 캐릭터 창, `desktop.py`: 파일 정리 도구)
 
 이 구조를 기준으로 다음 단계에서는 폴더 감시, OCR 필요 여부 검사, 업로드 상태 모니터링 같은 기능을 독립 모듈로 붙일 수 있습니다.
 
