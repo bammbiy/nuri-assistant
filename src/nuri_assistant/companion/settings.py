@@ -17,6 +17,8 @@ class CompanionSettings:
     history_limit: int = 20
     # Show the secretary picker every time the app starts.
     pick_on_start: bool = True
+    # Date (YYYY-MM-DD) of the last morning briefing, so it runs once a day.
+    last_briefing: str = ""
     x: int | None = None
     y: int | None = None
 

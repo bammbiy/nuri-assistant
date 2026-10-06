@@ -30,6 +30,24 @@ def subject_particle(name: str) -> str:
     return f"{name}가"
 
 
+def draw_pill(
+    canvas: tk.Canvas, x1: int, y1: int, x2: int, y2: int,
+    fill: str, outline: str = "", width: int = 1, tags: str | tuple[str, ...] = TAG,
+) -> None:
+    """Fully rounded rectangle; fill parts and outline parts are separate items."""
+
+    r = (y2 - y1) // 2
+    for x, start in ((x1, 90), (x2 - 2 * r, 270)):
+        canvas.create_arc(x, y1, x + 2 * r, y2, start=start, extent=180, style="pieslice", fill=fill, outline="", tags=tags)
+    canvas.create_rectangle(x1 + r, y1, x2 - r, y2, fill=fill, outline="", tags=tags)
+    if not outline:
+        return
+    for x, start in ((x1, 90), (x2 - 2 * r, 270)):
+        canvas.create_arc(x, y1, x + 2 * r, y2, start=start, extent=180, style="arc", outline=outline, width=width, tags=tags)
+    for y in (y1, y2):
+        canvas.create_line(x1 + r, y, x2 - r, y, fill=outline, width=width, tags=tags)
+
+
 class ChatBox:
     """Pill-shaped chat input drawn on the mascot canvas, shown only on demand."""
 
@@ -54,9 +72,8 @@ class ChatBox:
 
         right, bottom = left + width, top + HEIGHT
         cy = top + HEIGHT // 2
-        r = HEIGHT // 2
-        self._pill(left, top + 3, right, bottom + 3, r, fill=SHADOW, outline="")
-        self._pill(left, top, right, bottom, r, fill=PILL, outline=PILL_LINE, width=2)
+        draw_pill(canvas, left, top + 3, right, bottom + 3, fill=SHADOW)
+        draw_pill(canvas, left, top, right, bottom, fill=PILL, outline=PILL_LINE, width=2)
 
         # Menu button (three dots) on the left.
         mx = left + 22
@@ -95,20 +112,6 @@ class ChatBox:
             canvas.tag_bind(tag, "<Leave>", lambda _e, i=item, c=normal: self._hover(i, c))
         canvas.itemconfigure(TAG, state="hidden")
 
-    def _pill(self, x1: int, y1: int, x2: int, y2: int, r: int, fill: str, outline: str = "", width: int = 1) -> None:
-        canvas = self.canvas
-        for x, start in ((x1, 90), (x2 - 2 * r, 270)):
-            canvas.create_arc(x, y1, x + 2 * r, y2, start=start, extent=180, style="pieslice",
-                              fill=fill, outline="", tags=TAG)
-        canvas.create_rectangle(x1 + r, y1, x2 - r, y2, fill=fill, outline="", tags=TAG)
-        if not outline:
-            return
-        for x, start in ((x1, 90), (x2 - 2 * r, 270)):
-            canvas.create_arc(x, y1, x + 2 * r, y2, start=start, extent=180, style="arc",
-                              outline=outline, width=width, tags=TAG)
-        for y in (y1, y2):
-            canvas.create_line(x1 + r, y, x2 - r, y, fill=outline, width=width, tags=TAG)
-
     def _hover(self, item: int, color: str) -> None:
         if item == self.send_button and not self.enabled:
             return
@@ -144,7 +147,9 @@ class ChatBox:
         self._hint_on = True
 
     def _clear_hint(self) -> None:
-        if self._hint_on:
+        # A FocusIn can arrive late, after the box was disabled for a reply; a disabled
+        # Entry ignores delete(), so only clear while enabled or the flag goes out of sync.
+        if self._hint_on and self.enabled:
             self.entry.delete(0, "end")
             self.entry.configure(fg=TEXT)
             self._hint_on = False

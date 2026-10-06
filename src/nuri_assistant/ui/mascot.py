@@ -7,6 +7,7 @@ import threading
 import time
 import tkinter as tk
 from dataclasses import replace
+from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import messagebox, simpledialog, ttk
 
@@ -20,12 +21,15 @@ from ..companion import (
     load_settings,
     save_settings,
 )
+from ..schedule import Event, PendingAction, ScheduleStore, ScheduleTools
 from ..storage import HistoryStore
 from .assistant import AssistantWindow
 from .desktop import APP_DIR, DB_PATH, NuriAssistantApp
 from .chatbox import HEIGHT as CHAT_HEIGHT, ChatBox, subject_particle
+from .confirm_card import HEIGHT as CARD_HEIGHT, ConfirmCard
 from .picker import CharacterPicker
 from .placeholder import PLACEHOLDER_HEIGHT, draw_emote, draw_placeholder
+from .schedule_window import ScheduleWindow
 
 
 ASSETS_DIR = Path(__file__).resolve().parents[3] / "assets" / "characters"
@@ -40,6 +44,11 @@ CHAR_TOP = CHAR_BOTTOM - PLACEHOLDER_HEIGHT
 # Images may rise behind the bubble area so a bust-up drawing is shown large.
 CHAR_BOX = (WIDTH - 10, CHAR_BOTTOM - 130)
 CHAT_HIDE_DELAY_MS = 1200
+REMINDER_POLL_MS = 20_000
+BRIEFING_DELAY_MS = 4500
+# Typed answers that settle a confirm card without asking the model.
+YES_WORDS = {"응", "어", "네", "넵", "넹", "예", "웅", "ㅇㅇ", "ㅇ", "좋아", "그래", "등록", "등록해", "삭제", "삭제해", "확인", "오케이", "ok", "okay"}
+NO_WORDS = {"아니", "아니요", "아뇨", "ㄴㄴ", "ㄴ", "취소", "됐어", "싫어", "노", "no"}
 # Windows keys this exact color out of the window. A near-black key keeps
 # anti-aliased PNG edges looking like line art instead of a colored halo.
 TRANSPARENT_KEY = "#010203"
@@ -55,6 +64,9 @@ class MascotApp(tk.Tk):
         self.settings_path = app_dir / SETTINGS_PATH.name
         self.settings = load_settings(self.settings_path)
         self.store = ConversationStore(app_dir / MEMORY_PATH.name)
+        self.schedule = ScheduleStore(app_dir / MEMORY_PATH.name)
+        self.schedule_tools = ScheduleTools(self.schedule)
+        self.pending_actions: list[PendingAction] = []
         self.history = HistoryStore(app_dir / DB_PATH.name)
         self.user_dir = app_dir / "characters"
         self.events: queue.Queue[tuple] = queue.Queue()
@@ -82,7 +94,9 @@ class MascotApp(tk.Tk):
             self.after(10, lambda: self.open_picker(startup=True))
         else:
             self.say(random.choice(self.persona.greetings), "happy")
+            self.after(BRIEFING_DELAY_MS, self.brief_today)
         self.after(50, self._drain_events)
+        self.after(5000, self._check_reminders)
         self.after(3500, self._blink)
         self.after(120, self._watch_pointer)
         threading.Thread(target=self._check_model, daemon=True).start()
@@ -100,6 +114,7 @@ class MascotApp(tk.Tk):
             model=settings.model,
             user_name=settings.user_name,
             history_limit=settings.history_limit,
+            tools=self.schedule_tools,
         )
 
     def _update_settings(self, **changes: object) -> None:
@@ -139,11 +154,16 @@ class MascotApp(tk.Tk):
             on_menu=lambda x, y: self.menu.tk_popup(x, y),
         )
         self.chat.set_hint(self._idle_hint())
+        # Confirm cards sit over the character's chest, just above the chat box.
+        self.card = ConfirmCard(self.canvas, 20, CHAR_BOTTOM - CARD_HEIGHT - 4, WIDTH - 40)
 
         self.menu = tk.Menu(self, tearoff=False)
         self.menu.add_command(label="비서 선택…", command=self.open_picker)
         self.menu.add_command(label="내 이름 설정", command=self.ask_user_name)
         self.menu.add_command(label="AI 모델 설정", command=self.ask_model)
+        self.menu.add_separator()
+        self.menu.add_command(label="일정 보기", command=lambda: ScheduleWindow(self, self.schedule))
+        self.menu.add_command(label="오늘 일정 브리핑", command=lambda: self.brief_today(force=True))
         self.menu.add_separator()
         self.menu.add_command(label="대화 기록 보기", command=self.show_log)
         self.menu.add_command(label="이 캐릭터의 기억 지우기", command=self.clear_memory)
@@ -279,7 +299,9 @@ class MascotApp(tk.Tk):
             # Art of a different height: keep the bubble tail touching the head.
             self.head_top = head_top
             self._show_bubble(self._bubble_text)
-        self.canvas.tag_raise("bubble")
+        # Freshly drawn character items would otherwise cover the overlays.
+        for overlay in ("bubble", "confirm", "chat"):
+            self.canvas.tag_raise(overlay)
 
     def set_expression(self, expression: str) -> None:
         if expression in EXPRESSIONS and expression != self.expression:
@@ -374,6 +396,11 @@ class MascotApp(tk.Tk):
         if not text or self.busy:
             return
         self.chat.clear()
+        if self.card.visible:
+            answer = text.strip(" .!~?").lower()
+            if answer in YES_WORDS or answer in NO_WORDS:
+                self._resolve_card(answer in YES_WORDS)
+                return
         self._set_busy(True)
         self.say("…", "thinking")
         companion = self.companion
@@ -385,7 +412,7 @@ class MascotApp(tk.Tk):
         except Exception as exc:  # noqa: BLE001 - every failure must reach the bubble and re-enable input
             self.events.put(("error", str(exc)))
             return
-        self.events.put(("done", reply.text, reply.expression))
+        self.events.put(("done", reply.text, reply.expression, reply.actions))
 
     def _drain_events(self) -> None:
         try:
@@ -397,10 +424,13 @@ class MascotApp(tk.Tk):
                         self._start_talking()
                         self.say(visible, expression)
                 elif kind == "done":
-                    text, expression = values
+                    text, expression, actions = values
                     self.talking = False
                     self.say(text, expression)
                     self._set_busy(False)
+                    if actions:
+                        self.pending_actions = list(actions)
+                        self._show_next_card()
                 elif kind == "error":
                     self.talking = False
                     self.say(f"앗, 문제가 생겼어요.\n{values[0]}", "sad")
@@ -432,6 +462,61 @@ class MascotApp(tk.Tk):
         if model not in names:
             self.events.put(("notice", f"'{model}' 모델이 아직 없어요.\n터미널에서 ollama pull {model} 을 실행해 주세요.", "surprised"))
 
+    # ----- schedule -----------------------------------------------------------------
+
+    def _show_next_card(self) -> None:
+        if not self.pending_actions:
+            self.card.hide()
+            return
+        self.card.show(self.pending_actions[0], lambda: self._resolve_card(True), lambda: self._resolve_card(False))
+
+    def _resolve_card(self, approved: bool) -> None:
+        if not self.pending_actions:
+            self.card.hide()
+            return
+        action = self.pending_actions.pop(0)
+        if approved:
+            message = self.schedule_tools.confirm(action)
+            self.companion.note(message)
+            self.say(message, "happy")
+        else:
+            message = f"알겠어요, '{action.title}' {'등록은' if action.kind == 'add' else '취소는'} 하지 않을게요."
+            self.companion.note(message, "neutral")
+            self.say(message, "neutral")
+        self._show_next_card()
+
+    def _check_reminders(self) -> None:
+        if self.state() != "withdrawn" and not self.busy:
+            now = datetime.now()
+            due = self.schedule.due_reminders(now)
+            if due:
+                # One per poll so bubbles do not overwrite each other; the rest stay due.
+                event = due[0]
+                self.schedule.mark_reminded(event.id)
+                self.say(self.persona.reminder.format(when=_until(event, now), title=event.title), "surprised")
+                self.bell()
+        self.after(REMINDER_POLL_MS, self._check_reminders)
+
+    def brief_today(self, force: bool = False) -> None:
+        """Once a day (or on request), list today's events in the character's voice."""
+
+        now = datetime.now()
+        today = now.date().isoformat()
+        if not force and self.settings.last_briefing == today:
+            return
+        if not force:
+            self._update_settings(last_briefing=today)
+        start = datetime.combine(now.date(), datetime.min.time())
+        events = self.schedule.between(start, start + timedelta(days=1))
+        if not events:
+            if force:
+                self.say("오늘은 등록된 일정이 없어요.", "neutral")
+            return
+        lines = [f"· {'하루 종일' if e.all_day else e.start.strftime('%H:%M')} {e.title}" for e in events[:5]]
+        if len(events) > 5:
+            lines.append(f"· 외 {len(events) - 5}개")
+        self.say(self.persona.briefing.format(count=len(events)) + "\n" + "\n".join(lines), "happy")
+
     # ----- menu actions -----------------------------------------------------------
 
     def open_picker(self, startup: bool = False) -> None:
@@ -451,6 +536,8 @@ class MascotApp(tk.Tk):
                 self.attributes("-topmost", True)
             if startup or persona_id != self.persona.id:
                 self.switch_persona(persona_id)
+            if startup:
+                self.after(BRIEFING_DELAY_MS, self.brief_today)
 
         CharacterPicker(self, PERSONAS.values(), self.persona.id, thumbnail, picked, remember=not self.settings.pick_on_start)
 
@@ -539,3 +626,17 @@ def _fit_photo(image: tk.PhotoImage, box: tuple[int, int]) -> tk.PhotoImage:
 
 def run_mascot() -> None:
     MascotApp().mainloop()
+
+
+def _until(event: Event, now: datetime) -> str:
+    """'10분 뒤에', '1시간 뒤에', '지금', or '오늘' for all-day events."""
+
+    if event.all_day:
+        return "오늘"
+    minutes = max(round((event.start - now).total_seconds() / 60), 0)
+    if minutes == 0:
+        return "지금"
+    if minutes < 60:
+        return f"{minutes}분 뒤에"
+    hours, rest = divmod(minutes, 60)
+    return f"{hours}시간 {rest}분 뒤에" if rest else f"{hours}시간 뒤에"

@@ -28,10 +28,24 @@ class Persona:
     greetings: tuple[str, ...]
     pokes: tuple[str, ...]
     look: Look
+    # Spoken by the app itself (no model call): {when} is like "10분 뒤에", {title} the event name.
+    reminder: str = "{when} '{title}' 일정이 있어요!"
+    # Morning briefing opener; the event list follows on the next lines.
+    briefing: str = "오늘 일정은 {count}개예요."
 
-    def system_prompt(self, user_name: str = "", now: str = "") -> str:
+    def system_prompt(self, user_name: str = "", now: str = "", schedule: bool = False) -> str:
         who = f"사용자의 이름은 '{user_name}'이다. " if user_name else ""
         when = f"현재 시각은 {now}이다. " if now else ""
+        if schedule:
+            abilities = (
+                "일정 관련 요청(등록, 조회, 취소)에는 반드시 도구를 사용한다. 날짜와 시간은 직접 계산하지 말고 "
+                "사용자가 말한 표현 그대로 도구에 넘긴다. 등록과 취소는 사용자가 화면의 확인 버튼을 눌러야 끝나므로, "
+                "도구를 부른 뒤에는 아래에서 확인해 달라고 캐릭터 말투로 짧게 안내한다. "
+                "도구가 오류를 돌려주면 그 내용을 바탕으로 사용자에게 다시 물어본다. "
+                "조회 결과는 시간 순서대로 짧게 정리해 말한다. "
+            )
+        else:
+            abilities = "지금 AI 모델은 일정 기능(도구 호출)을 쓸 수 없어서 일정을 직접 등록하거나 조회할 수 없다. "
         tags = ", ".join(f"[{expression}]" for expression in EXPRESSIONS)
         return (
             f"너는 '{self.name}'. 일본 애니메이션의 {self.archetype} 캐릭터 같은 성격을 가진, "
@@ -42,7 +56,8 @@ class Persona:
             "사용자가 자세히 원할 때만 길게 설명한다. "
             f"모든 답변은 반드시 표정 태그 하나로 시작한다. 사용할 수 있는 태그: {tags}. "
             "예: [happy] 좋아, 같이 해보자! "
-            "아직은 파일 정리, 일정 등록 같은 작업을 직접 실행할 수 없다. "
+            f"{abilities}"
+            "파일 정리 같은 그 밖의 작업은 아직 직접 실행할 수 없다. "
             "실행하지 않은 작업을 했다고 말하지 말고, 할 수 없는 일은 캐릭터 말투로 솔직하게 말한다. "
             "모르는 사실은 지어내지 않는다. 캐릭터 설정은 유지하되 사용자를 실제로 깎아내리거나 상처 주지 않는다."
         )
@@ -74,6 +89,8 @@ PERSONAS: dict[str, Persona] = {
                 "선배, 일 안 하고 저랑 놀려는 거죠?",
             ),
             look=Look(hair="#c9b3e6", eyes="#6cc9b0", outfit="#f3e6c8", hairstyle="long", accessory="hairpin"),
+            reminder="선배, {when} '{title}' 일정이 있어요! 준비하세요~",
+            briefing="선배, 오늘 일정은 {count}개예요! 누리가 정리해 왔어요.",
         ),
         Persona(
             id="sera",
@@ -98,6 +115,8 @@ PERSONAS: dict[str, Persona] = {
                 "그렇게 빤히 보면 누나도 좀 부끄러운데?",
             ),
             look=Look(hair="#24202b", eyes="#c0394b", outfit="#17151c", hairstyle="long", accessory="hairpin"),
+            reminder="동생, {when} '{title}' 있는 거 알지? 누나가 챙겨 줬어.",
+            briefing="오늘 동생 일정은 {count}개야. 누나가 정리해 뒀어.",
         ),
         Persona(
             id="akane",
@@ -115,6 +134,8 @@ PERSONAS: dict[str, Persona] = {
             ),
             pokes=("자, 잠깐! 함부로 찌르지 마!", "뭐야, 할 말 있으면 똑바로 해!", "...심심해? 흥, 조금만 놀아 줄게."),
             look=Look(hair="#d9434b", eyes="#f2a33a", outfit="#2f3e66", hairstyle="twintails", accessory="ribbon"),
+            reminder="{when} '{title}' 있잖아! 잊어버리면 안 된다고!",
+            briefing="오늘 일정 {count}개야. 흥, 내가 정리해 줬으니까 고마운 줄 알아!",
         ),
         Persona(
             id="shizuku",
@@ -129,6 +150,8 @@ PERSONAS: dict[str, Persona] = {
             greetings=("...왔구나. 오늘 할 일, 정리해 둘까.", "기다렸어. ...조금."),
             pokes=("...왜.", "찌르지 마. ...싫은 건 아니지만.", "용건, 있어?"),
             look=Look(hair="#9fb7d9", eyes="#5b6fd6", outfit="#3a3f4a", hairstyle="short", accessory="hairpin"),
+            reminder="...{when} '{title}'. 잊지 마.",
+            briefing="...오늘 일정, {count}개.",
         ),
         Persona(
             id="hinata",
@@ -140,6 +163,8 @@ PERSONAS: dict[str, Persona] = {
             greetings=("왔다! 오늘도 같이 힘내 보자!", "헤헤, 기다리고 있었어! 뭐부터 할까?"),
             pokes=("앗, 간지러워!", "응응? 놀아 주는 거야?", "에헤헤, 왜 불렀어?"),
             look=Look(hair="#f5a742", eyes="#3fae6a", outfit="#e9f0fb", hairstyle="ponytail", accessory="scrunchie"),
+            reminder="{when} '{title}' 있어! 같이 준비하자!",
+            briefing="오늘 일정은 {count}개야! 하나씩 해치우자!",
         ),
         Persona(
             id="sakura",
@@ -151,6 +176,8 @@ PERSONAS: dict[str, Persona] = {
             greetings=("어서 오세요, 주인님. 오늘은 무엇을 도와 드릴까요?", "주인님, 기다리고 있었어요. 차라도 한잔 내어 드릴까요?"),
             pokes=("꺄, 주, 주인님...?", "부르셨나요, 주인님?", "후후, 장난이 심하세요."),
             look=Look(hair="#f2a7c3", eyes="#a0527a", outfit="#2b2b36", hairstyle="long", accessory="headdress"),
+            reminder="주인님, {when} '{title}' 일정이 있습니다.",
+            briefing="주인님, 오늘 일정은 {count}개입니다.",
         ),
         Persona(
             id="reika",
@@ -162,6 +189,8 @@ PERSONAS: dict[str, Persona] = {
             greetings=("오호호, 이 레이카가 도와 드리겠어요. 영광으로 아세요!", "어서 오세요. 오늘도 우아하게 일을 끝내 볼까요?"),
             pokes=("어머, 무례하군요!", "이, 이 레이카에게 무슨 짓이에요!", "오호호, 제가 그렇게 궁금한가요?"),
             look=Look(hair="#e8c66a", eyes="#7a3fb0", outfit="#7b2d4f", hairstyle="drills", accessory="tiara"),
+            reminder="{when} '{title}' 일정이에요. 늦지 않도록 하세요, 오호호!",
+            briefing="오늘 일정은 {count}개랍니다. 우아하게 해치워 볼까요?",
         ),
     )
 }

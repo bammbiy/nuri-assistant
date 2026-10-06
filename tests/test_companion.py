@@ -154,13 +154,13 @@ class FakeClient:
         self.parts = parts
         self.messages: list[dict[str, str]] = []
 
-    def chat_stream(self, _model, messages, options=None):
+    def chat_stream(self, _model, messages, options=None, tools=None):
         self.messages = messages
         yield from self.parts
 
 
 class FailingClient:
-    def chat_stream(self, _model, _messages, options=None):
+    def chat_stream(self, _model, _messages, options=None, tools=None):
         raise OllamaError("down")
         yield  # pragma: no cover
 

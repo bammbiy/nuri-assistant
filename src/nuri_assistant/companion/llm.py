@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -13,6 +14,16 @@ DEFAULT_MODEL = "qwen3:8b"
 
 class OllamaError(RuntimeError):
     pass
+
+
+class OllamaToolsUnsupported(OllamaError):
+    """The selected model cannot call tools (schedule features need one that can)."""
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    name: str
+    arguments: dict[str, Any]
 
 
 class OllamaClient:
@@ -29,9 +40,12 @@ class OllamaClient:
     def chat_stream(
         self,
         model: str,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         options: dict[str, Any] | None = None,
-    ) -> Iterator[str]:
+        tools: list[dict[str, Any]] | None = None,
+    ) -> Iterator[str | ToolCall]:
+        """Yield reply text chunks, and ToolCall items when the model calls a tool."""
+
         payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
@@ -41,9 +55,13 @@ class OllamaClient:
             "keep_alive": "30m",
             "options": {"temperature": 0.8, "num_ctx": 4096, **(options or {})},
         }
+        if tools:
+            payload["tools"] = tools
         try:
             response = self._open("POST", "/api/chat", payload)
         except OllamaError as exc:
+            if "does not support tools" in str(exc):
+                raise OllamaToolsUnsupported(str(exc)) from exc
             if "think" not in str(exc).lower():
                 raise
             # Models without thinking support may reject the flag; retry without it.
@@ -57,9 +75,19 @@ class OllamaClient:
                 event = json.loads(line.decode("utf-8"))
                 if event.get("error"):
                     raise OllamaError(str(event["error"]))
-                content = event.get("message", {}).get("content", "")
+                message = event.get("message", {})
+                content = message.get("content", "")
                 if content:
                     yield content
+                for call in message.get("tool_calls") or []:
+                    function = call.get("function", {})
+                    arguments = function.get("arguments") or {}
+                    if isinstance(arguments, str):
+                        try:
+                            arguments = json.loads(arguments)
+                        except ValueError:
+                            arguments = {}
+                    yield ToolCall(str(function.get("name", "")), arguments if isinstance(arguments, dict) else {})
                 if event.get("done"):
                     return
 
