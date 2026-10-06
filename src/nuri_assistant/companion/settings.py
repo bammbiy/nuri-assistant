@@ -27,6 +27,8 @@ class CompanionSettings:
     voice_enabled: bool = False
     voice_url: str = "http://127.0.0.1:50021"
     voice_ids: dict = field(default_factory=dict)  # persona id -> engine style id
+    # "bust" (upper body, default) or "full" (full body, taller window).
+    display_mode: str = "bust"
     x: int | None = None
     y: int | None = None
 

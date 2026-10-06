@@ -55,7 +55,9 @@ CANVAS_HEIGHT = 560
 CHAR_BOTTOM = CANVAS_HEIGHT - CHAT_HEIGHT - 18
 CHAR_TOP = CHAR_BOTTOM - PLACEHOLDER_HEIGHT
 # Images may rise behind the bubble area so a bust-up drawing is shown large.
-CHAR_BOX = (WIDTH - 10, CHAR_BOTTOM - 130)
+CHAR_BOX = (WIDTH - 10, CHAR_BOTTOM - 120)
+# Full-body frames are 480px tall vs 344px for the bust; the window grows by this much.
+FULL_EXTRA = 150
 CHAT_HIDE_DELAY_MS = 1200
 REMINDER_POLL_MS = 20_000
 FIRST_PRICE_CHECK_MS = 30_000
@@ -110,7 +112,9 @@ class MascotApp(tk.Tk):
         self.companion = self._make_companion()
 
         self.expression = "neutral"
-        self.head_top = CHAR_TOP
+        self.full_mode = self.settings.display_mode == "full"
+        self.extra = FULL_EXTRA if self.full_mode else 0
+        self.head_top = CHAR_TOP + self.extra
         self._bubble_text = ""
         self._relax_token = 0
         self.talking = False
@@ -178,7 +182,7 @@ class MascotApp(tk.Tk):
         self.configure(bg=self.bg)
 
     def _build(self) -> None:
-        self.canvas = tk.Canvas(self, width=WIDTH, height=CANVAS_HEIGHT, bg=self.bg, highlightthickness=0, bd=0)
+        self.canvas = tk.Canvas(self, width=WIDTH, height=CANVAS_HEIGHT + self.extra, bg=self.bg, highlightthickness=0, bd=0)
         self.canvas.pack()
         self.canvas.tag_bind("character", "<ButtonPress-1>", self._on_press)
         self.canvas.tag_bind("character", "<B1-Motion>", self._on_drag)
@@ -189,16 +193,19 @@ class MascotApp(tk.Tk):
             self.canvas.bind("<Button-2>", self._show_menu)
 
         self.chat = ChatBox(
-            self.canvas, 20, CHAR_BOTTOM + 6, WIDTH - 40,
+            self.canvas, 20, self.char_bottom + 6, WIDTH - 40,
             on_send=self.send,
             on_menu=lambda x, y: self.menu.tk_popup(x, y),
         )
         self.chat.set_hint(self._idle_hint())
         # Confirm cards sit over the character's chest, just above the chat box.
-        self.card = ConfirmCard(self.canvas, 20, CHAR_BOTTOM - CARD_HEIGHT - 4, WIDTH - 40)
+        self.card = ConfirmCard(self.canvas, 20, self.char_bottom - CARD_HEIGHT - 4, WIDTH - 40)
 
         self.menu = tk.Menu(self, tearoff=False)
         self.menu.add_command(label="비서 선택…", command=self.open_picker)
+        self.full_var = tk.BooleanVar(value=self.full_mode)
+        self.menu.add_checkbutton(label="전신으로 보기", variable=self.full_var,
+                                  command=lambda: self.set_display_mode("full" if self.full_var.get() else "bust"))
         self.menu.add_command(label="내 이름 설정", command=self.ask_user_name)
         self.menu.add_command(label="AI 모델 설정", command=self.ask_model)
         self.menu.add_separator()
@@ -280,11 +287,45 @@ class MascotApp(tk.Tk):
             self.chat.hide()
         self.after(120, self._watch_pointer)
 
+    def set_display_mode(self, mode: str) -> None:
+        """Switch bust/full body; the window grows upward so the character's feet stay put."""
+
+        full = mode == "full"
+        if full == self.full_mode:
+            return
+        dy = (FULL_EXTRA if full else 0) - self.extra
+        self.full_mode, self.extra = full, FULL_EXTRA if full else 0
+        self.full_var.set(full)
+        self.canvas.configure(height=CANVAS_HEIGHT + self.extra)
+        self.canvas.move("chat", 0, dy)
+        self.chat.top += dy
+        self.card.top += dy
+        if self.card.visible:
+            self._show_next_card()
+        self.update_idletasks()
+        y = max(self.winfo_y() - dy, 0)
+        self.geometry(f"+{self.winfo_x()}+{y}")
+        self._update_settings(display_mode=mode, y=y)
+        self._render_character()
+        self._show_bubble(self._bubble_text)
+
     # ----- character --------------------------------------------------------------
 
-    def _image_path(self, name: str, persona_id: str | None = None) -> Path | None:
+    @property
+    def char_bottom(self) -> int:
+        return CHAR_BOTTOM + self.extra
+
+    def _art_dirs(self, persona_id: str, full: bool) -> list[Path]:
+        """Where frames are looked up; full-body art is used only when it exists, never mixed."""
+
+        bases = [self.user_dir / persona_id, ASSETS_DIR / persona_id]
+        if full and any((base / "full" / "neutral.png").exists() for base in bases):
+            return [base / "full" for base in bases]
+        return bases
+
+    def _image_path(self, name: str, persona_id: str | None = None, full: bool | None = None) -> Path | None:
         persona_id = persona_id or self.persona.id
-        for folder in (self.user_dir / persona_id, ASSETS_DIR / persona_id):
+        for folder in self._art_dirs(persona_id, self.full_mode if full is None else full):
             path = folder / f"{name}.png"
             if path.exists():
                 return path
@@ -308,7 +349,8 @@ class MascotApp(tk.Tk):
                     return image, has_expression
         return None, False
 
-    def _load_image(self, path: Path, box: tuple[int, int] = CHAR_BOX) -> tk.PhotoImage | None:
+    def _load_image(self, path: Path, box: tuple[int, int] | None = None) -> tk.PhotoImage | None:
+        box = box or (CHAR_BOX[0], CHAR_BOX[1] + self.extra)
         if (path, box) in self._images:
             return self._images[(path, box)]
         image: tk.PhotoImage | None
@@ -332,13 +374,13 @@ class MascotApp(tk.Tk):
         mouth = self.talking and self.mouth_open
         image, has_expression = self._image_for(self.expression, mouth, self.blinking)
         if image is None:
-            head_top = CHAR_TOP
-            draw_placeholder(self.canvas, WIDTH // 2, CHAR_TOP, self.persona.look, self.expression, mouth, self.blinking)
+            head_top = CHAR_TOP + self.extra
+            draw_placeholder(self.canvas, WIDTH // 2, head_top, self.persona.look, self.expression, mouth, self.blinking)
         else:
-            top = CHAR_BOTTOM - image.height()
+            top = self.char_bottom - image.height()
             head_top = top + 12
             self.canvas.delete("character")
-            self.canvas.create_image(WIDTH // 2, CHAR_BOTTOM, anchor="s", image=image, tags="character")
+            self.canvas.create_image(WIDTH // 2, self.char_bottom, anchor="s", image=image, tags="character")
             if not has_expression:
                 draw_emote(self.canvas, WIDTH // 2 + int(image.width() * 0.3), top + int(image.height() * 0.2), self.expression)
         if head_top != self.head_top:
@@ -753,7 +795,7 @@ class MascotApp(tk.Tk):
             return
 
         def thumbnail(persona, box):
-            path = self._image_path("neutral", persona.id)
+            path = self._image_path("neutral", persona.id, full=False)
             return self._load_image(path, box) if path else None
 
         def picked(persona_id: str, remember: bool) -> None:

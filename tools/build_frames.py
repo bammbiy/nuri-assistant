@@ -24,6 +24,8 @@ W, H = 405, 344                   # output frame size
 EYE_OUT = (202.5, 187.5)          # where the midpoint between the eyes lands
 SS = 6                            # supersampling for hand-drawn edits
 EXPRESSION_ORDER = ("happy", "thinking", "surprised", "sad", "angry", "shy")
+FULL_W, FULL_H = 405, 480          # full-body frames (same width as the bust frames)
+FULL_FIGURE_H = 462                # figure height inside a full-body frame
 
 CHARACTERS = {
     "nuri": dict(
@@ -34,6 +36,8 @@ CHARACTERS = {
             talk=((1473.6, 437.0), (19.5, 15.6)),  # mouth center and size in sheet px
             blink=((1363.3, 1439.5, 335.6, 386.3), (1500.0, 1582.0, 335.6, 386.3)), skin=(1471, 363),
         ),
+        # Full-body figure on the left of the base sheet: cut box, figure top/bottom, eyes.
+        full=dict(crop=(100, 0, 680, 1116), top=131, bottom=1089, mid=(369.5, 195), dist=59),
         expressions=dict(
             sheet="reference_expressions.webp", dist=89,
             columns=((0, 690), (690, 1300), (1300, 2000)), rows=((0, 560), (560, 1116)),
@@ -52,6 +56,7 @@ CHARACTERS = {
             talk=((1472.5, 434), (19.5, 15.6)),
             blink=((1366, 1442, 330, 374), (1505, 1584, 330, 374)), skin="ring", lash=3.4, feather=2.4,
         ),
+        full=dict(crop=(120, 0, 620, 1116), top=52, bottom=1096, mid=(372, 189), dist=52),
         expressions=dict(
             # 2000x1117 upscale of the original 1024x572 sheet; coordinates scaled by ~1.953.
             sheet="reference_expressions.webp", dist=82,
@@ -137,6 +142,49 @@ def ring_color(img, box):
     return tuple(int(v) for v in np.median(a[band][:, :3], axis=0)) + (255,)
 
 
+def build_full(config, folder, session, frames, out):
+    """Full-body frames: the sheet's full-body figure with each bust frame's face pasted on.
+
+    Faces are scaled by eye distance and aligned on the eyes, then blended through a
+    feathered oval that covers brows to chin, so expressions, talking and blinking carry
+    over. Hand gestures exist only in the bust art and are left out.
+    """
+    full = config["full"]
+    sheet = Image.open(folder / config["base"]["sheet"]).convert("RGB")
+    ox, oy = full["crop"][:2]
+    figure = remove(sheet.crop(full["crop"]), session=session).convert("RGBA")
+    k = FULL_FIGURE_H / (full["bottom"] - full["top"])
+    eye = ((full["mid"][0] - ox) * k, (full["mid"][1] - oy) * k)
+    # Center horizontally on the eyes, feet a few pixels above the frame bottom.
+    left = eye[0] - FULL_W / 2
+    top = (full["bottom"] - oy) * k - (FULL_H - 6)
+    scaled = figure.convert("RGBa").resize((round(figure.width * k), round(figure.height * k)), Image.LANCZOS).convert("RGBA")
+    base = Image.new("RGBA", (FULL_W, FULL_H), (0, 0, 0, 0))
+    base.alpha_composite(scaled, (round(-left), round(-top)))
+    eye_full = (eye[0] - round(left), eye[1] - round(top))
+
+    face_k = full["dist"] * k / config["eye_px"]
+    # Brows+eyes band plus a small mouth oval: wide enough for the expression, but it
+    # stops short of the chin and cheeks where bust poses put hands and sleeves.
+    d, (ex, ey) = config["eye_px"], EYE_OUT
+    mask = Image.new("L", (W, H), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.ellipse([ex - 1.0 * d, ey - 0.6 * d, ex + 1.0 * d, ey + 0.5 * d], fill=255)
+    draw.ellipse([ex - 0.36 * d, ey + 0.32 * d, ex + 0.36 * d, ey + 0.86 * d], fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(d * 0.07))
+
+    out = out / "full"
+    out.mkdir(parents=True, exist_ok=True)
+    for frame_name, frame in frames.items():
+        face = frame.copy()
+        face.putalpha(Image.composite(face.getchannel("A"), Image.new("L", face.size, 0), mask))
+        size = (round(W * face_k), round(H * face_k))
+        small = face.convert("RGBa").resize(size, Image.LANCZOS).convert("RGBA")
+        result = base.copy()
+        result.alpha_composite(small, (round(eye_full[0] - EYE_OUT[0] * face_k), round(eye_full[1] - EYE_OUT[1] * face_k)))
+        result.save(out / f"{frame_name}.png", optimize=True)
+
+
 def build(name, out):
     config = CHARACTERS[name]
     folder = ASSETS / name
@@ -180,8 +228,11 @@ def build(name, out):
             frames[f"{expression}_talk"] = talk(frames[expression], to_out((mx - x0, my - y0), mid, k), size)
 
     out.mkdir(parents=True, exist_ok=True)
-    for frame, img in frames.items():
-        clean(img).save(out / f"{frame}.png", optimize=True)
+    cleaned = {frame: clean(img) for frame, img in frames.items()}
+    for frame, img in cleaned.items():
+        img.save(out / f"{frame}.png", optimize=True)
+    if "full" in config:
+        build_full(config, folder, session, cleaned, out)
     return sorted(frames)
 
 
