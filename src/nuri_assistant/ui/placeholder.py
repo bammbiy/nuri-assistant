@@ -179,3 +179,34 @@ def _accessory(canvas: tk.Canvas, cx: int, top: int, look: Look) -> None:
             fill="#f5d061", outline=LINE, width=2, tags=TAG,
         )
         canvas.create_oval(cx - 5, top + 8, cx + 5, top + 18, fill="#e0457b", outline="", tags=TAG)
+
+
+def draw_emote(canvas: tk.Canvas, x: int, y: int, expression: str) -> None:
+    """Anime-style mood mark beside the head, for art that only has a neutral face."""
+
+    tags = (TAG, "emote")
+    bold = ("Arial", 22, "bold")
+    if expression == "happy":
+        canvas.create_text(x, y, text="♪", font=bold, fill="#ff6fa3", tags=tags)
+        canvas.create_text(x + 22, y - 18, text="♪", font=("Arial", 15, "bold"), fill="#b18cf0", tags=tags)
+    elif expression == "thinking":
+        canvas.create_text(x + 8, y - 6, text="?", font=("Arial", 26, "bold"), fill="#8a6cd8", tags=tags)
+        for index in range(3):
+            dot = x - 14 + index * 7
+            canvas.create_oval(dot - 2, y + 18, dot + 2, y + 22, fill="#8a6cd8", outline="", tags=tags)
+    elif expression == "surprised":
+        canvas.create_text(x + 6, y - 6, text="!", font=("Arial", 28, "bold"), fill="#ff5a5f", tags=tags)
+        for dx, dy in ((-16, -14), (-20, 0), (-14, 12)):
+            canvas.create_line(x + dx, y + dy, x + dx - 8, y + dy - dy // 3, width=3, fill="#ff5a5f", capstyle="round", tags=tags)
+    elif expression == "sad":
+        canvas.create_polygon(x, y - 14, x - 9, y + 4, x - 6, y + 12, x + 6, y + 12, x + 9, y + 4,
+                              smooth=True, fill="#8fd0ff", outline="#4a90c8", width=2, tags=tags)
+    elif expression == "angry":
+        for start in (0, 90, 180, 270):
+            canvas.create_arc(x - 16, y - 16, x + 16, y + 16, start=start + 20, extent=50, style="arc",
+                              outline="#ff3b3b", width=4, tags=tags)
+    elif expression == "shy":
+        for index in range(3):
+            left = x - 14 + index * 9
+            canvas.create_line(left, y + 8, left + 8, y - 8, width=3, fill="#ff7fa8", capstyle="round", tags=tags)
+        canvas.create_text(x + 26, y - 14, text="♥", font=("Arial", 14, "bold"), fill="#ff7fa8", tags=tags)

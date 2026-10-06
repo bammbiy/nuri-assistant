@@ -88,7 +88,7 @@ class NoClobberTest(unittest.TestCase):
 
 class PersonaTest(unittest.TestCase):
     def test_every_persona_is_complete(self) -> None:
-        self.assertGreaterEqual(len(PERSONAS), 5)
+        self.assertGreaterEqual(len(PERSONAS), 6)
         for persona_id, persona in PERSONAS.items():
             with self.subTest(persona=persona_id):
                 self.assertEqual(persona.id, persona_id)
@@ -101,7 +101,7 @@ class PersonaTest(unittest.TestCase):
                     self.assertIn(f"[{expression}]", prompt)
 
     def test_unknown_persona_falls_back_to_default(self) -> None:
-        self.assertEqual(get_persona("missing").id, "sakura")
+        self.assertEqual(get_persona("missing").id, "nuri")
 
 
 class ReplyParserTest(unittest.TestCase):

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import queue
 import random
 import sys
@@ -23,7 +22,7 @@ from ..companion import (
 from ..storage import HistoryStore
 from .assistant import AssistantWindow
 from .desktop import APP_DIR, DB_PATH, NuriAssistantApp
-from .placeholder import draw_placeholder
+from .placeholder import draw_emote, draw_placeholder
 
 
 ASSETS_DIR = Path(__file__).resolve().parents[3] / "assets" / "characters"
@@ -33,7 +32,8 @@ MEMORY_PATH = APP_DIR / "companion.sqlite3"
 WIDTH = 360
 CHAR_TOP = 200
 CANVAS_HEIGHT = 540
-CHAR_BOX = (340, CANVAS_HEIGHT - CHAR_TOP)
+# Images may rise behind the bubble area so a bust-up drawing is shown large.
+CHAR_BOX = (WIDTH - 20, CANVAS_HEIGHT - 130)
 # Windows keys this exact color out of the window. A near-black key keeps
 # anti-aliased PNG edges looking like line art instead of a colored halo.
 TRANSPARENT_KEY = "#010203"
@@ -193,21 +193,30 @@ class MascotApp(tk.Tk):
 
     # ----- character --------------------------------------------------------------
 
-    def _image_for(self, expression: str, talking: bool, blinking: bool) -> tk.PhotoImage | None:
-        names = []
-        if talking:
-            names.append(f"{expression}_talk")
-        if blinking:
-            names.append(f"{expression}_blink")
-        names += [expression, "neutral"]
+    def _image_path(self, name: str) -> Path | None:
         for folder in (self.user_dir / self.persona.id, ASSETS_DIR / self.persona.id):
-            for name in names:
-                path = folder / f"{name}.png"
-                if path.exists():
-                    image = self._load_image(path)
-                    if image is not None:
-                        return image
+            path = folder / f"{name}.png"
+            if path.exists():
+                return path
         return None
+
+    def _image_for(self, expression: str, talking: bool, blinking: bool) -> tuple[tk.PhotoImage | None, bool]:
+        """Return the frame to show and whether the expression itself has art.
+
+        A missing expression falls back to neutral; its talk/blink variants still
+        animate, and the caller adds an emote mark so the mood stays readable.
+        """
+
+        has_expression = self._image_path(expression) is not None
+        base = expression if has_expression else "neutral"
+        names = ([f"{base}_talk"] if talking else []) + ([f"{base}_blink"] if blinking else []) + [base]
+        for name in names:
+            path = self._image_path(name)
+            if path is not None:
+                image = self._load_image(path)
+                if image is not None:
+                    return image, has_expression
+        return None, False
 
     def _load_image(self, path: Path) -> tk.PhotoImage | None:
         if path in self._images:
@@ -221,10 +230,7 @@ class MascotApp(tk.Tk):
             image = ImageTk.PhotoImage(picture, master=self)
         except ImportError:
             try:
-                image = tk.PhotoImage(master=self, file=str(path))
-                factor = math.ceil(max(image.width() / CHAR_BOX[0], image.height() / CHAR_BOX[1], 1))
-                if factor > 1:
-                    image = image.subsample(factor)
+                image = _fit_photo(tk.PhotoImage(master=self, file=str(path)))
             except tk.TclError:
                 image = None
         except OSError:
@@ -234,12 +240,15 @@ class MascotApp(tk.Tk):
 
     def _render_character(self) -> None:
         mouth = self.talking and self.mouth_open
-        image = self._image_for(self.expression, mouth, self.blinking)
+        image, has_expression = self._image_for(self.expression, mouth, self.blinking)
         if image is None:
             draw_placeholder(self.canvas, WIDTH // 2, CHAR_TOP, self.persona.look, self.expression, mouth, self.blinking)
         else:
             self.canvas.delete("character")
             self.canvas.create_image(WIDTH // 2, CANVAS_HEIGHT, anchor="s", image=image, tags="character")
+            if not has_expression:
+                top = CANVAS_HEIGHT - image.height()
+                draw_emote(self.canvas, WIDTH // 2 + int(image.width() * 0.3), top + int(image.height() * 0.2), self.expression)
         self.canvas.tag_raise("bubble")
 
     def set_expression(self, expression: str) -> None:
@@ -435,6 +444,21 @@ class MascotApp(tk.Tk):
     def quit_app(self) -> None:
         self._update_settings(x=self.winfo_x(), y=self.winfo_y())
         self.destroy()
+
+
+def _fit_photo(image: tk.PhotoImage) -> tk.PhotoImage:
+    """Scale into CHAR_BOX with Tk's integer zoom/subsample (used when Pillow is absent)."""
+
+    target = min(CHAR_BOX[0] / image.width(), CHAR_BOX[1] / image.height(), 1.0)
+    if target >= 1.0:
+        return image
+    zoom, sub = max(
+        ((z, s) for s in range(1, 7) for z in range(1, s + 1) if z / s <= target),
+        key=lambda pair: pair[0] / pair[1],
+    )
+    if zoom > 1:
+        image = image.zoom(zoom)
+    return image.subsample(sub) if sub > 1 else image
 
 
 def run_mascot() -> None:

@@ -11,6 +11,7 @@
 
 | 캐릭터 id | 이름 | 컨셉 |
 |---|---|---|
+| `nuri` | 누리 | 다정한 후배 비서 (기본 캐릭터), 라일락→민트 웨이브 머리 |
 | `akane` | 아카네 | 츤데레, 빨간 트윈테일 |
 | `shizuku` | 시즈쿠 | 쿠데레, 은청색 단발 |
 | `hinata` | 히나타 | 활발한 소꿉친구, 주황 포니테일 |
@@ -22,6 +23,8 @@
 ```text
 neutral.png  happy.png  thinking.png  surprised.png  sad.png  angry.png  shy.png
 ```
+
+기본 표정 이미지만 있고 다른 표정 이미지가 없으면, 기본 표정 그림 옆에 만화식 감정 표시(♪ ? ! 땀방울, 화남 표시, 부끄럼 표시)를 띄워 감정을 보여 줍니다.
 
 선택 파일:
 
@@ -85,3 +88,13 @@ lowres, bad anatomy, bad hands, extra fingers, text, watermark, signature, multi
 ## 새 캐릭터 추가하기
 
 `src/nuri_assistant/companion/personas.py`의 `PERSONAS`에 `Persona`를 하나 추가하고, 같은 id로 이미지 폴더를 만들면 메뉴에 나타납니다. 성격과 말투는 `summary`와 `speech_style`에 적으면 시스템 프롬프트에 그대로 들어갑니다.
+
+## 누리 이미지 현황
+
+`nuri/` 폴더에는 AI로 생성한 캐릭터 시트(`reference_sheet.webp`)에서 잘라 낸 이미지가 들어 있습니다.
+
+- `neutral.png`: 상반신, 배경 제거 (rembg `isnet-anime` 모델 사용)
+- `neutral_talk.png`: 입을 벌린 버전 (원본 위에 덧그림)
+- `neutral_blink.png`: 눈을 감은 버전 (원본 위에 덧그림)
+
+나머지 표정(`happy`, `thinking`, `surprised`, `sad`, `angry`, `shy`)은 `reference_sheet.webp`를 img2img 입력으로 넣고, 위의 표정 태그로 얼굴만 인페인팅해서 만들면 같은 캐릭터로 유지됩니다. 원본 해상도가 낮으므로(1024×572), 고해상도로 다시 뽑으면 더 선명해집니다.
