@@ -24,6 +24,7 @@ from ..storage import HistoryStore
 from .assistant import AssistantWindow
 from .desktop import APP_DIR, DB_PATH, NuriAssistantApp
 from .chatbox import HEIGHT as CHAT_HEIGHT, ChatBox, subject_particle
+from .picker import CharacterPicker
 from .placeholder import PLACEHOLDER_HEIGHT, draw_emote, draw_placeholder
 
 
@@ -67,7 +68,7 @@ class MascotApp(tk.Tk):
         self.mouth_open = False
         self.blinking = False
         self.busy = False
-        self._images: dict[Path, tk.PhotoImage | None] = {}
+        self._images: dict[tuple[Path, tuple[int, int]], tk.PhotoImage | None] = {}
         self._drag_start: tuple[int, int, int, int] | None = None
         self._dragged = False
         self._last_hover = 0.0
@@ -76,7 +77,11 @@ class MascotApp(tk.Tk):
         self._build()
         self._place_window()
         self._render_character()
-        self.say(random.choice(self.persona.greetings), "happy")
+        if self.settings.pick_on_start:
+            self.withdraw()
+            self.after(10, lambda: self.open_picker(startup=True))
+        else:
+            self.say(random.choice(self.persona.greetings), "happy")
         self.after(50, self._drain_events)
         self.after(3500, self._blink)
         self.after(120, self._watch_pointer)
@@ -136,16 +141,7 @@ class MascotApp(tk.Tk):
         self.chat.set_hint(self._idle_hint())
 
         self.menu = tk.Menu(self, tearoff=False)
-        self.persona_var = tk.StringVar(value=self.persona.id)
-        persona_menu = tk.Menu(self.menu, tearoff=False)
-        for persona in PERSONAS.values():
-            persona_menu.add_radiobutton(
-                label=f"{persona.name} ({persona.archetype})",
-                value=persona.id,
-                variable=self.persona_var,
-                command=lambda persona_id=persona.id: self.switch_persona(persona_id),
-            )
-        self.menu.add_cascade(label="캐릭터 변경", menu=persona_menu)
+        self.menu.add_command(label="비서 선택…", command=self.open_picker)
         self.menu.add_command(label="내 이름 설정", command=self.ask_user_name)
         self.menu.add_command(label="AI 모델 설정", command=self.ask_model)
         self.menu.add_separator()
@@ -220,8 +216,9 @@ class MascotApp(tk.Tk):
 
     # ----- character --------------------------------------------------------------
 
-    def _image_path(self, name: str) -> Path | None:
-        for folder in (self.user_dir / self.persona.id, ASSETS_DIR / self.persona.id):
+    def _image_path(self, name: str, persona_id: str | None = None) -> Path | None:
+        persona_id = persona_id or self.persona.id
+        for folder in (self.user_dir / persona_id, ASSETS_DIR / persona_id):
             path = folder / f"{name}.png"
             if path.exists():
                 return path
@@ -245,24 +242,24 @@ class MascotApp(tk.Tk):
                     return image, has_expression
         return None, False
 
-    def _load_image(self, path: Path) -> tk.PhotoImage | None:
-        if path in self._images:
-            return self._images[path]
+    def _load_image(self, path: Path, box: tuple[int, int] = CHAR_BOX) -> tk.PhotoImage | None:
+        if (path, box) in self._images:
+            return self._images[(path, box)]
         image: tk.PhotoImage | None
         try:
             from PIL import Image, ImageTk  # optional: smoother resizing when Pillow is installed
 
             picture = Image.open(path).convert("RGBA")
-            picture.thumbnail(CHAR_BOX, Image.LANCZOS)
+            picture.thumbnail(box, Image.LANCZOS)
             image = ImageTk.PhotoImage(picture, master=self)
         except ImportError:
             try:
-                image = _fit_photo(tk.PhotoImage(master=self, file=str(path)))
+                image = _fit_photo(tk.PhotoImage(master=self, file=str(path)), box)
             except tk.TclError:
                 image = None
         except OSError:
             image = None
-        self._images[path] = image
+        self._images[(path, box)] = image
         return image
 
     def _render_character(self) -> None:
@@ -437,9 +434,28 @@ class MascotApp(tk.Tk):
 
     # ----- menu actions -----------------------------------------------------------
 
+    def open_picker(self, startup: bool = False) -> None:
+        if self.busy:
+            return
+
+        def thumbnail(persona, box):
+            path = self._image_path("neutral", persona.id)
+            return self._load_image(path, box) if path else None
+
+        def picked(persona_id: str, remember: bool) -> None:
+            self._update_settings(pick_on_start=not remember)
+            if startup:
+                # Borderless windows need the flag re-applied after being withdrawn (Windows).
+                self.overrideredirect(True)
+                self.deiconify()
+                self.attributes("-topmost", True)
+            if startup or persona_id != self.persona.id:
+                self.switch_persona(persona_id)
+
+        CharacterPicker(self, PERSONAS.values(), self.persona.id, thumbnail, picked, remember=not self.settings.pick_on_start)
+
     def switch_persona(self, persona_id: str) -> None:
         if self.busy:
-            self.persona_var.set(self.persona.id)
             return
         self._update_settings(persona_id=persona_id)
         self.chat.set_hint(self._idle_hint())
@@ -495,15 +511,21 @@ class MascotApp(tk.Tk):
             self.store.clear(self.persona.id)
             self.say("...처음 뵙겠습니다?", "surprised")
 
+    def destroy(self) -> None:
+        # Cancel animation/polling timers so none fires into a destroyed interpreter.
+        for after_id in self.tk.splitlist(self.tk.call("after", "info")):
+            self.after_cancel(after_id)
+        super().destroy()
+
     def quit_app(self) -> None:
         self._update_settings(x=self.winfo_x(), y=self.winfo_y())
         self.destroy()
 
 
-def _fit_photo(image: tk.PhotoImage) -> tk.PhotoImage:
-    """Scale into CHAR_BOX with Tk's integer zoom/subsample (used when Pillow is absent)."""
+def _fit_photo(image: tk.PhotoImage, box: tuple[int, int]) -> tk.PhotoImage:
+    """Scale into box with Tk's integer zoom/subsample (used when Pillow is absent)."""
 
-    target = min(CHAR_BOX[0] / image.width(), CHAR_BOX[1] / image.height(), 1.0)
+    target = min(box[0] / image.width(), box[1] / image.height(), 1.0)
     if target >= 1.0:
         return image
     zoom, sub = max(

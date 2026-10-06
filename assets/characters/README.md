@@ -12,6 +12,7 @@
 | 캐릭터 id | 이름 | 컨셉 |
 |---|---|---|
 | `nuri` | 누리 | 다정한 후배 비서 (기본 캐릭터), 라일락→민트 웨이브 머리 |
+| `sera` | 세라 | 어른스러운 누나 비서, 검은 긴 생머리 |
 | `akane` | 아카네 | 츤데레, 빨간 트윈테일 |
 | `shizuku` | 시즈쿠 | 쿠데레, 은청색 단발 |
 | `hinata` | 히나타 | 활발한 소꿉친구, 주황 포니테일 |
@@ -93,7 +94,7 @@ lowres, bad anatomy, bad hands, extra fingers, text, watermark, signature, multi
 
 `nuri/` 폴더의 이미지는 AI로 생성한 시트 두 장에서 잘라 만들었습니다.
 
-- 원본: `reference_sheet.webp` (기본 표정), `reference_expressions.jpg` (표정 6종)
+- 원본: `reference_sheet.webp` (기본 표정, 1024×572), `reference_expressions.webp` (표정 6종, 2000×1116 고화질)
 - 표정 7종: `neutral`, `happy`, `thinking`, `surprised`, `sad`, `angry`, `shy`
   - 배경 제거에는 rembg의 `isnet-anime` 모델을 썼습니다.
   - 두 시트의 캐릭터 크기가 달라서, 눈 위치와 눈 사이 거리를 기준으로 크기와 위치를 맞추고 모두 머리부터 가슴까지로 같은 구도로 잘랐습니다.
@@ -103,7 +104,7 @@ lowres, bad anatomy, bad hands, extra fingers, text, watermark, signature, multi
   - 입을 이미 벌린 표정(기쁨, 놀람, 부끄럼)은 그 자체로 말하는 것처럼 보이므로 따로 만들지 않았습니다.
 - 대답이 끝나고 몇 초가 지나면 기본 표정으로 돌아가, 다시 눈을 깜빡입니다.
 
-원본 해상도가 낮아서(1024×572) 크게 보면 살짝 흐립니다. 같은 구도로 고해상도 시트를 다시 뽑으면 똑같은 방식으로 다시 잘라 넣을 수 있습니다.
+표정 6종은 고화질 시트에서 잘랐지만, 기본 표정은 아직 저해상도 시트(1024×572)에서 잘라서 상대적으로 흐립니다. 기본 표정도 고화질로 다시 뽑으면 같은 방식으로 다시 잘라 넣을 수 있습니다.
 
 이 이미지들은 아래 명령으로 다시 만들 수 있습니다. 시트를 새로 뽑았다면, 스크립트 위쪽에 적힌 자르는 위치와 눈 위치를 먼저 새로 재야 합니다.
 
@@ -111,3 +112,58 @@ lowres, bad anatomy, bad hands, extra fingers, text, watermark, signature, multi
 pip install pillow numpy scipy rembg onnxruntime
 python tools/build_nuri_frames.py
 ```
+
+## 새 캐릭터 시트 뽑는 요령 (잘라 넣기 쉬운 형식)
+
+누리 때처럼 시트 두 장을 뽑으면 됩니다.
+
+1. **기본 시트:** 오른쪽에 큰 상반신, 왼쪽에 전신이 있는 캐릭터 시트
+2. **표정 시트:** 3열×2줄, 칸마다 상반신 한 명과 이름표 (기쁨, 생각, 놀람 / 슬픔, 화남, 부끄럼)
+
+잘라 넣기 쉽게 하려면 다음을 지켜 주세요.
+
+- 머리카락과 겹치는 포스트잇, 아이콘, 효과선은 없을수록 좋습니다. 따로 떨어진 장식은 자동으로 지워지지만, 머리에 붙은 것은 남습니다.
+- 두 눈이 모두 보여야 합니다. 앞머리로 한쪽 눈을 가리는 디자인은 표정끼리 위치를 맞추기 어렵습니다.
+- 가로 2000px 이상의 고화질로 뽑아 주세요.
+
+## 세라 이미지 프롬프트
+
+### ChatGPT나 Gemini 같은 대화형 이미지 생성기
+
+**기본 시트**
+
+```text
+오리지널 애니메이션 스타일 버츄얼 캐릭터 디자인 시트. 성인 여성, 어른스럽고 글래머러스한 누나 비서 캐릭터.
+허리까지 오는 윤기 나는 검은 생머리, 옆으로 넘긴 앞머리(두 눈이 모두 보이게), 붉은 눈, 눈 밑 점, 붉은 립, 여유로운 미소.
+몸에 딱 맞는 검은 터틀넥 니트, 하이웨스트 펜슬 스커트, 검은 스타킹, 하이힐, 작은 골드 귀걸이, 한쪽 귀에 무선 헤드셋, 태블릿을 든 비서 느낌.
+키가 크고 볼륨감 있는 체형, 세련되고 우아한 분위기.
+왼쪽에 전신, 오른쪽에 크게 상반신. 배경은 연한 단색으로 깔끔하게, 캐릭터와 겹치는 소품이나 아이콘은 넣지 말 것.
+고화질, 깨끗한 선화, 부드러운 조명.
+```
+
+**표정 시트**
+
+```text
+방금 만든 캐릭터와 완전히 같은 디자인으로 표정 시트를 만들어 줘.
+3열 2줄, 칸마다 같은 구도의 상반신 한 명씩: 기쁨, 생각(턱에 손), 놀람 / 슬픔, 화남(삐짐), 부끄럼.
+칸 아래에 한글 이름표. 배경은 연한 단색, 머리카락과 겹치는 아이콘이나 효과선은 넣지 말 것. 가로 2000px 이상 고화질.
+```
+
+### Stable Diffusion (애니 계열 SDXL 모델)
+
+**포지티브**
+
+```text
+masterpiece, best quality, very aesthetic, absurdres, 1girl, solo, original, mature female, adult, tall, curvy, large breasts, wide hips, narrow waist,
+long hair, black hair, straight hair, swept bangs, red eyes, mole under eye, red lips, light smile, confident, half-closed eyes,
+gold earrings, wireless headset, black turtleneck, ribbed sweater, taut clothes, high-waist skirt, pencil skirt, black pantyhose, high heels, holding tablet, office lady,
+upper body, looking at viewer, simple background, white background, clean lineart, soft lighting
+```
+
+**네거티브**
+
+```text
+lowres, worst quality, bad quality, bad anatomy, bad hands, extra fingers, text, watermark, signature, multiple girls, hair over eyes, child, loli, petite, nsfw, nude
+```
+
+표정은 위의 "표정 태그" 표와 같은 방식으로 바꿔서 뽑으면 됩니다.

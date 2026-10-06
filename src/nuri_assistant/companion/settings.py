@@ -15,6 +15,8 @@ class CompanionSettings:
     ollama_url: str = DEFAULT_OLLAMA_URL
     user_name: str = ""
     history_limit: int = 20
+    # Show the secretary picker every time the app starts.
+    pick_on_start: bool = True
     x: int | None = None
     y: int | None = None
 

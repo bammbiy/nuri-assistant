@@ -4,7 +4,7 @@
     python tools/build_nuri_frames.py
 
 Reads assets/characters/nuri/reference_sheet.webp (neutral, 1024x572) and
-reference_expressions.jpg (six expressions, 3x2 grid). The crop boxes and eye
+reference_expressions.webp (six expressions, 3x2 grid, 2000x1116). The crop boxes and eye
 positions below were measured on those exact sheets; if you regenerate a sheet,
 re-measure them (eye midpoint and eye distance) before running.
 """
@@ -17,7 +17,7 @@ from scipy import ndimage
 
 NURI = Path(__file__).resolve().parents[1] / "assets" / "characters" / "nuri"
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else NURI
-PANEL_K = 1.5                     # output px per expression-sheet px
+PANEL_K = 0.767                   # output px per expression-sheet px
 W, H = 405, 344                   # 270 x ~229 sheet px
 EYE_OUT = (202.5, 187.5)          # where the midpoint between the eyes lands
 SS = 6                            # supersampling for hand-drawn edits
@@ -26,14 +26,17 @@ session = new_session("isnet-anime")
 sheet = Image.open(NURI / "reference_sheet.webp").convert("RGB")
 neutral_rgb = sheet.crop((520, 0, 1000, 572))  # bust-up figure on the right
 neutral_cut = remove(neutral_rgb, session=session)
-expressions = Image.open(NURI / "reference_expressions.jpg").convert("RGB")
+expressions = Image.open(NURI / "reference_expressions.webp").convert("RGB")
 
 # (eye midpoint, eye distance) measured by hand on a coordinate grid
 NEUTRAL = dict(mid=(232, 184.5), dist=64)
-PANEL_DIST = 45.5  # same sheet, same scale: use one value for every panel
+PANEL_DIST = 89  # same sheet, same scale: use one value for every panel
+# Panel boxes on the sheet, then eye midpoints relative to each panel.
+COLUMNS = ((0, 690), (690, 1300), (1300, 2000))
+ROWS = ((0, 560), (560, 1116))
 PANELS = {
-    "happy": (202, 126), "thinking": (170.5, 127), "surprised": (136, 127.5),
-    "sad": (198, 114), "angry": (169.5, 114.5), "shy": (137.5, 115),
+    "happy": (396, 248), "thinking": (309, 247), "surprised": (297.5, 251.75),
+    "sad": (388, 218), "angry": (310, 219), "shy": (300, 215.5),
 }
 
 def place(img, mid, k):
@@ -104,13 +107,13 @@ frames["neutral_blink"] = blink(neutral, eyes, skin)
 # Expressions: one panel each from the expression sheet.
 for name, pmid in PANELS.items():
     index = list(PANELS).index(name)
-    col, row = index % 3, index // 3
-    box = (col * 341, row * 286, min((col + 1) * 341 + 1, 1024), (row + 1) * 286)
+    (x0, x1), (y0, y1) = COLUMNS[index % 3], ROWS[index // 3]
+    box = (x0, y0, x1, y1)
     panel = remove(expressions.crop(box), session=session).convert("RGBA")
     frames[name] = place(panel, pmid, PANEL_K)
 # Mouths that are closed in the art get a talking frame; open ones already read as speech.
-frames["thinking_talk"] = talk(frames["thinking"], to_out((170, 149), PANELS["thinking"], PANEL_K), (9, 7))
-frames["sad_talk"] = talk(frames["sad"], to_out((196.5, 141.5), PANELS["sad"], PANEL_K), (9, 7))
+frames["thinking_talk"] = talk(frames["thinking"], to_out((311.5, 297), PANELS["thinking"], PANEL_K), (10, 8))
+frames["sad_talk"] = talk(frames["sad"], to_out((388, 275.5), PANELS["sad"], PANEL_K), (10, 8))
 
 OUT.mkdir(parents=True, exist_ok=True)
 for name, img in frames.items():
