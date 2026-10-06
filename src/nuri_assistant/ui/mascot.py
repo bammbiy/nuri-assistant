@@ -4,6 +4,7 @@ import queue
 import random
 import sys
 import threading
+import time
 import tkinter as tk
 from dataclasses import replace
 from pathlib import Path
@@ -22,7 +23,8 @@ from ..companion import (
 from ..storage import HistoryStore
 from .assistant import AssistantWindow
 from .desktop import APP_DIR, DB_PATH, NuriAssistantApp
-from .placeholder import draw_emote, draw_placeholder
+from .chatbox import HEIGHT as CHAT_HEIGHT, ChatBox, subject_particle
+from .placeholder import PLACEHOLDER_HEIGHT, draw_emote, draw_placeholder
 
 
 ASSETS_DIR = Path(__file__).resolve().parents[3] / "assets" / "characters"
@@ -30,10 +32,13 @@ SETTINGS_PATH = APP_DIR / "companion.json"
 MEMORY_PATH = APP_DIR / "companion.sqlite3"
 
 WIDTH = 360
-CHAR_TOP = 200
-CANVAS_HEIGHT = 540
+CANVAS_HEIGHT = 560
+# The chat box appears right under the character, in the strip below CHAR_BOTTOM.
+CHAR_BOTTOM = CANVAS_HEIGHT - CHAT_HEIGHT - 18
+CHAR_TOP = CHAR_BOTTOM - PLACEHOLDER_HEIGHT
 # Images may rise behind the bubble area so a bust-up drawing is shown large.
-CHAR_BOX = (WIDTH - 10, CANVAS_HEIGHT - 130)
+CHAR_BOX = (WIDTH - 10, CHAR_BOTTOM - 130)
+CHAT_HIDE_DELAY_MS = 1200
 # Windows keys this exact color out of the window. A near-black key keeps
 # anti-aliased PNG edges looking like line art instead of a colored halo.
 TRANSPARENT_KEY = "#010203"
@@ -65,6 +70,7 @@ class MascotApp(tk.Tk):
         self._images: dict[Path, tk.PhotoImage | None] = {}
         self._drag_start: tuple[int, int, int, int] | None = None
         self._dragged = False
+        self._last_hover = 0.0
 
         self._setup_window()
         self._build()
@@ -73,6 +79,7 @@ class MascotApp(tk.Tk):
         self.say(random.choice(self.persona.greetings), "happy")
         self.after(50, self._drain_events)
         self.after(3500, self._blink)
+        self.after(120, self._watch_pointer)
         threading.Thread(target=self._check_model, daemon=True).start()
 
     @property
@@ -121,18 +128,12 @@ class MascotApp(tk.Tk):
         if sys.platform == "darwin":
             self.canvas.bind("<Button-2>", self._show_menu)
 
-        bar = tk.Frame(self, bg="#ffffff", highlightthickness=1, highlightbackground="#c9bfd6")
-        bar.pack(fill="x", padx=12, pady=(0, 6))
-        self.input_var = tk.StringVar()
-        self.entry = ttk.Entry(bar, textvariable=self.input_var)
-        self.entry.pack(side="left", fill="x", expand=True, padx=(6, 4), pady=6)
-        self.entry.bind("<Return>", lambda _event: self.send())
-        # Borderless windows do not always take focus on click (notably on X11).
-        self.entry.bind("<Button-1>", lambda _event: self.entry.focus_force())
-        self.send_button = ttk.Button(bar, text="보내기", width=6, command=self.send)
-        self.send_button.pack(side="left", pady=6)
-        ttk.Button(bar, text="≡", width=2, command=self._show_menu_at_button).pack(side="left", padx=(4, 6), pady=6)
-        self.menu_anchor = bar
+        self.chat = ChatBox(
+            self.canvas, 20, CHAR_BOTTOM + 6, WIDTH - 40,
+            on_send=self.send,
+            on_menu=lambda x, y: self.menu.tk_popup(x, y),
+        )
+        self.chat.set_hint(self._idle_hint())
 
         self.menu = tk.Menu(self, tearoff=False)
         self.persona_var = tk.StringVar(value=self.persona.id)
@@ -187,12 +188,35 @@ class MascotApp(tk.Tk):
             self._update_settings(x=self.winfo_x(), y=self.winfo_y())
         elif not self.busy:
             self.say(random.choice(self.persona.pokes), random.choice(("surprised", "shy", "happy")))
+            self.chat.focus()
 
     def _show_menu(self, event: tk.Event) -> None:
         self.menu.tk_popup(event.x_root, event.y_root)
 
-    def _show_menu_at_button(self) -> None:
-        self.menu.tk_popup(self.menu_anchor.winfo_rootx() + WIDTH - 60, self.menu_anchor.winfo_rooty())
+    def _idle_hint(self) -> str:
+        return f"{self.persona.name}에게 말 걸기…"
+
+    def _watch_pointer(self) -> None:
+        """Show the chat box while the mouse is on the character (or the box itself)."""
+
+        px, py = self.winfo_pointerxy()
+        x, y = px - self.canvas.winfo_rootx(), py - self.canvas.winfo_rooty()
+        box = self.canvas.bbox("character")
+        over_character = box is not None and box[0] - 8 <= x <= box[2] + 8 and box[1] <= y <= box[3] + 12
+        keep = (
+            over_character
+            or self.chat.contains(x, y)
+            or self.busy
+            or (self.chat.focused() and bool(self.chat.text()))
+            or self._drag_start is not None
+        )
+        now = time.monotonic()
+        if keep:
+            self._last_hover = now
+            self.chat.show()
+        elif self.chat.visible and (now - self._last_hover) * 1000 > CHAT_HIDE_DELAY_MS:
+            self.chat.hide()
+        self.after(120, self._watch_pointer)
 
     # ----- character --------------------------------------------------------------
 
@@ -248,10 +272,10 @@ class MascotApp(tk.Tk):
             head_top = CHAR_TOP
             draw_placeholder(self.canvas, WIDTH // 2, CHAR_TOP, self.persona.look, self.expression, mouth, self.blinking)
         else:
-            top = CANVAS_HEIGHT - image.height()
+            top = CHAR_BOTTOM - image.height()
             head_top = top + 12
             self.canvas.delete("character")
-            self.canvas.create_image(WIDTH // 2, CANVAS_HEIGHT, anchor="s", image=image, tags="character")
+            self.canvas.create_image(WIDTH // 2, CHAR_BOTTOM, anchor="s", image=image, tags="character")
             if not has_expression:
                 draw_emote(self.canvas, WIDTH // 2 + int(image.width() * 0.3), top + int(image.height() * 0.2), self.expression)
         if head_top != self.head_top:
@@ -349,10 +373,10 @@ class MascotApp(tk.Tk):
     # ----- conversation -----------------------------------------------------------
 
     def send(self) -> None:
-        text = self.input_var.get().strip()
+        text = self.chat.text().strip()
         if not text or self.busy:
             return
-        self.input_var.set("")
+        self.chat.clear()
         self._set_busy(True)
         self.say("…", "thinking")
         companion = self.companion
@@ -393,11 +417,12 @@ class MascotApp(tk.Tk):
 
     def _set_busy(self, busy: bool) -> None:
         self.busy = busy
-        state = "disabled" if busy else "normal"
-        self.entry.configure(state=state)
-        self.send_button.configure(state=state)
-        if not busy:
-            self.entry.focus_set()
+        if busy:
+            self.chat.set_enabled(False, f"{subject_particle(self.persona.name)} 대답하는 중…")
+        else:
+            self.chat.set_enabled(True, self._idle_hint())
+            if self.chat.visible:
+                self.chat.focus()
 
     def _check_model(self) -> None:
         client, model = OllamaClient(self.settings.ollama_url), self.settings.model
@@ -417,6 +442,7 @@ class MascotApp(tk.Tk):
             self.persona_var.set(self.persona.id)
             return
         self._update_settings(persona_id=persona_id)
+        self.chat.set_hint(self._idle_hint())
         self.expression = "neutral"
         self._render_character()
         self.say(random.choice(self.persona.greetings), "happy")

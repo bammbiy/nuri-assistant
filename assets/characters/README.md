@@ -104,3 +104,10 @@ lowres, bad anatomy, bad hands, extra fingers, text, watermark, signature, multi
 - 대답이 끝나고 몇 초가 지나면 기본 표정으로 돌아가, 다시 눈을 깜빡입니다.
 
 원본 해상도가 낮아서(1024×572) 크게 보면 살짝 흐립니다. 같은 구도로 고해상도 시트를 다시 뽑으면 똑같은 방식으로 다시 잘라 넣을 수 있습니다.
+
+이 이미지들은 아래 명령으로 다시 만들 수 있습니다. 시트를 새로 뽑았다면, 스크립트 위쪽에 적힌 자르는 위치와 눈 위치를 먼저 새로 재야 합니다.
+
+```bash
+pip install pillow numpy scipy rembg onnxruntime
+python tools/build_nuri_frames.py
+```
