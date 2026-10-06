@@ -117,8 +117,7 @@ python tools/build_frames.py nuri   # 세라는 sera
 
 `sera/` 폴더도 누리와 같은 방식으로 만들었습니다 (`python tools/build_frames.py sera`).
 
-- 원본: `reference_sheet.webp` (기본 표정, 2000×1116 고화질), `reference_expressions.png` (표정 6종, 1024×572)
-- 표정 시트가 저해상도라 표정 6종은 기본 표정보다 조금 흐립니다. 표정 시트를 고화질로 다시 뽑으면 더 선명해집니다.
+- 원본: `reference_sheet.webp` (기본 표정, 2000×1116), `reference_expressions.webp` (표정 6종, 1024×572 시트를 2000×1117로 업스케일)
 - 말하는 입: `neutral_talk`, `thinking_talk`, `sad_talk`. 화남은 삐친 입 모양이라 입 벌린 그림을 덧그리면 어색해서 만들지 않았습니다.
 - 눈 감은 모습: `neutral_blink`
 

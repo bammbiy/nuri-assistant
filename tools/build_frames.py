@@ -52,12 +52,12 @@ CHARACTERS = {
             blink=((1366, 1442, 330, 374), (1505, 1584, 330, 374)), skin="ring", lash=3.4, feather=2.4,
         ),
         expressions=dict(
-            sheet="reference_expressions.png", dist=42,
-            # 1024x572 sheet with gray 4px borders between panels
-            columns=((4, 340), (344, 680), (684, 1020)), rows=((2, 285), (288, 571)),
-            mids=dict(happy=(178, 109), thinking=(519.6, 109.25), surprised=(852.6, 109.25),
-                      sad=(173.5, 396), angry=(516.5, 396), shy=(858.25, 396)),
-            talk=dict(thinking=((516.5, 135), (12, 9)), sad=((176, 423), (12, 9))),
+            # 2000x1117 upscale of the original 1024x572 sheet; coordinates scaled by ~1.953.
+            sheet="reference_expressions.webp", dist=82,
+            columns=((8, 664), (671, 1329), (1337, 1992)), rows=((4, 556), (562, 1113)),
+            mids=dict(happy=(347.7, 212.9), thinking=(1014.8, 213.3), surprised=(1665.2, 213.3),
+                      sad=(338.9, 773.3), angry=(1008.8, 773.3), shy=(1676.3, 773.3)),
+            talk=dict(thinking=((1008.8, 263.6), (12, 9)), sad=((343.8, 826.0), (12, 9))),
         ),
     ),
 }
