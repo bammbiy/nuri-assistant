@@ -19,6 +19,8 @@ from PIL import Image, ImageDraw, ImageFilter
 from rembg import new_session, remove
 from scipy import ndimage
 
+from key_alpha import FADE_ROWS, key_alpha
+
 ASSETS = Path(__file__).resolve().parents[1] / "assets" / "characters"
 W, H = 405, 344                   # output frame size
 EYE_OUT = (202.5, 187.5)          # where the midpoint between the eyes lands
@@ -341,7 +343,7 @@ def build_full(config, folder, session, frames, out):
         size = (round(W * face_k), round(H * face_k))
         small = face.convert("RGBa").resize(size, Image.LANCZOS).convert("RGBA")
         result.alpha_composite(small, (round(eye_full[0] - EYE_OUT[0] * face_k), round(eye_full[1] - EYE_OUT[1] * face_k)))
-        result.save(out / f"{frame_name}.png", optimize=True)
+        key_alpha(result).save(out / f"{frame_name}.png", optimize=True)
 
 
 def build(name, out):
@@ -393,7 +395,7 @@ def build(name, out):
     out.mkdir(parents=True, exist_ok=True)
     cleaned = {frame: clean(img, alpha_fix=config.get("alpha")) for frame, img in frames.items()}
     for frame, img in cleaned.items():
-        img.save(out / f"{frame}.png", optimize=True)
+        key_alpha(img, FADE_ROWS).save(out / f"{frame}.png", optimize=True)
     if "full" in config:
         build_full(config, folder, session, cleaned, out)
     return sorted(frames)

@@ -70,6 +70,7 @@ tests/           test_<영역>.py (classic, companion, schedule, pricewatch, tod
 assets/characters/<id>/        상반신 프레임 405×344 + 원본 시트 2장 (reference_sheet, reference_expressions)
 assets/characters/<id>/full/   전신 프레임 405×480
 tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터별 좌표는 CHARACTERS 설정, 의존성은 tools/requirements-frames.txt)
+tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창의 검은 테두리 방지, 여러 번 돌려도 같음)
 ```
 
 사용자 데이터(`~/.nuri-assistant/`): `companion.json`(설정·네이버 API 키, 못 읽으면 `.bak`로 보존), `error.log`(예외 기록), `companion.sqlite3`(대화·일정·할 일·가격 감시), `history.sqlite3`(파일 이름 변경 이력), `profiles.json`(파일 정리 도구의 작업 프로필), `characters/<id>/`(개인 캐릭터 이미지, 저장소보다 우선).
@@ -113,7 +114,8 @@ tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터�
 - 채팅창은 캐릭터에 마우스를 올렸을 때만 보이고, 마우스만으로는 입력 포커스를 가져오지 않습니다.
 - 프레임은 1:1로 보여 줍니다(상반신 405×344, 전신 405×480, 창 폭 `WIDTH = 415`). 실행 중 리샘플링은 화질을 떨어뜨리니 크기를 바꾸려면 `tools/build_frames.py`의 `W, H`/`FULL_W, FULL_H`와 `WIDTH`를 같이 바꿉니다.
 - 전신 모드(`display_mode = "full"`)는 캔버스가 `FULL_EXTRA`(150px) 커지고 창이 위로 늘어납니다. 레이아웃 좌표는 `self.char_bottom`, `self.extra`를 씁니다. 전신 그림이 없는 캐릭터는 상반신으로 나옵니다.
-- Windows 투명 키 색 `#010203`은 캐릭터 창 배경 외에는 쓰지 않습니다.
+- Windows 투명 키 색 `#010203`은 캐릭터 창 배경 외에는 쓰지 않습니다. 캐릭터 창 배경은 Windows에서 이 색이 뚫려 **배경 없이 캐릭터만** 보입니다(컨테이너 스크린샷의 연보라 사각형은 리눅스에 투명 기능이 없어 보이는 `FALLBACK_BG`일 뿐).
+- 이 방식은 한 색만 뚫기 때문에 반투명 픽셀이 거의 검정인 키 색과 섞여 **검은 테두리**가 생깁니다. 그래서 캐릭터 프레임의 알파는 0 또는 255만 씁니다: 가장자리는 110에서 자르고, 상반신 아래 40줄의 흐려지는 부분은 점무늬(4×4 Bayer 디더링)로 바꿉니다(`tools/key_alpha.py`, `build_frames.py`가 저장할 때 자동 적용). 개인 그림은 Pillow가 있으면 실행 중에 같은 컷을 적용합니다(`CharacterArt(hard_edges=...)`). 화면 확인은 키 색으로 그린 뒤 키 색 픽셀만 배경으로 바꿔 Windows를 흉내 냅니다.
 
 ## 캐릭터
 
@@ -137,7 +139,8 @@ tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터�
    - **표정끼리 머리 크기·위치:** 눈 사이 거리만으로 맞추면 표정 시트 칸마다 얼굴 크기가 달라 표정을 바꿀 때 머리가 커졌다 작아집니다. 기본 표정의 머리 윤곽을 다른 표정 위에 겹쳐 그려 보고(어니언 스킨), 머리카락 윤곽과 얼굴 피부 영역이 가장 잘 겹치는 배율·이동을 찾아 `expressions["adjust"]`에 (배율, dx, dy)로 넣습니다. 보정 후 표정별 머리 폭 차이는 ±2% 안이어야 합니다.
    - **전신 얼굴:** 전신 `mid`/`dist`는 눈동자 중심을 10배 확대해서 재고, 코·입·턱이 상반신과 같은 배율(눈 사이 거리의 배수)인지 확인합니다. 어긋나면 눈·입만 맞아 보이고 얼굴이 이상해집니다. 붙이는 범위는 `full["face"]`(타원 + 표정별 아래 한계)이고, 그 안에서도 얼굴 피부와 앞머리·눈 띠만 가져옵니다(머리카락·헤드셋 줄·손·소매는 전신 그림 것).
    - 그 밖에: 이름표 글자는 `rows`로 끊기, 배경 번짐은 `alpha`, 전신 주변 잔상은 `full["erase"]`, 홍조 있는 얼굴의 눈 감기는 `skin="lerp"`.
-4. 배경 제거(rembg)는 실행마다 아주 약간 결과가 달라질 수 있으니, 고친 캐릭터의 프레임만 교체합니다.
+4. 새 프레임은 `build_frames.py`가 알파를 0/255로 바꿔 저장합니다. 손으로 만든 프레임을 넣었다면 `python tools/key_alpha.py <폴더>`를 돌립니다.
+5. 배경 제거(rembg)는 실행마다 아주 약간 결과가 달라질 수 있으니, 고친 캐릭터의 프레임만 교체합니다.
 
 ## 남은 일
 

@@ -118,7 +118,7 @@ class MascotApp(tk.Tk):
         self._voice_error_shown = False
         self._price_checking = False
         self.pending_actions: list[ConfirmableAction] = []
-        self.art = CharacterArt(self, app_dir / USER_CHARACTERS.name, ASSETS_DIR)
+        self.art = CharacterArt(self, app_dir / USER_CHARACTERS.name, ASSETS_DIR, hard_edges=sys.platform == "win32")
         self.events: queue.Queue[tuple] = queue.Queue()
         self.companion = self._make_companion()
 
@@ -836,8 +836,11 @@ class MascotApp(tk.Tk):
 
     def destroy(self) -> None:
         # Cancel animation/polling timers so none fires into a destroyed interpreter.
+        # Plain Tcl "after cancel": after_cancel() also deletes the callback's Tcl command, and for
+        # timers a child widget scheduled (chat box, bubble) that command belongs to the child, whose
+        # own destroy then fails with "can't delete Tcl command" and the app never closes.
         for after_id in self.tk.splitlist(self.tk.call("after", "info")):
-            self.after_cancel(after_id)
+            self.tk.call("after", "cancel", after_id)
         super().destroy()
 
     def quit_app(self) -> None:

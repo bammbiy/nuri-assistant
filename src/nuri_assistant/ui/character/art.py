@@ -4,15 +4,21 @@ import math
 import tkinter as tk
 from pathlib import Path
 
+ALPHA_CUT = 110  # same cut as tools/key_alpha.py
+
 
 class CharacterArt:
     """Finds and caches character frames: personal images first, then the bundled assets."""
 
-    def __init__(self, master: tk.Misc, user_dir: Path, assets_dir: Path) -> None:
+    def __init__(self, master: tk.Misc, user_dir: Path, assets_dir: Path, hard_edges: bool = False) -> None:
+        # hard_edges: on the Windows colour-key window a half-transparent pixel is blended with
+        # the near-black key colour (dark halo), so character frames get alpha 0/255 only.
+        # Bundled frames already are (tools/key_alpha.py); this covers personal art.
+        self.hard_edges = hard_edges
         self.master = master
         self.user_dir = user_dir
         self.assets_dir = assets_dir
-        self._images: dict[tuple[Path, tuple[int, int]], tk.PhotoImage | None] = {}
+        self._images: dict[tuple[Path, tuple[int, int], bool], tk.PhotoImage | None] = {}
 
     def art_dirs(self, persona_id: str, full: bool) -> list[Path]:
         """Where frames are looked up; full-body art is used only when it exists, never mixed."""
@@ -43,20 +49,22 @@ class CharacterArt:
         for name in names:
             path = self.image_path(name, persona_id, full)
             if path is not None:
-                image = self.load(path, box)
+                image = self.load(path, box, self.hard_edges)
                 if image is not None:
                     return image, has_expression
         return None, False
 
-    def load(self, path: Path, box: tuple[int, int]) -> tk.PhotoImage | None:
-        if (path, box) in self._images:
-            return self._images[(path, box)]
+    def load(self, path: Path, box: tuple[int, int], hard_edges: bool = False) -> tk.PhotoImage | None:
+        if (path, box, hard_edges) in self._images:
+            return self._images[(path, box, hard_edges)]
         image: tk.PhotoImage | None
         try:
             from PIL import Image, ImageTk  # optional: smoother resizing when Pillow is installed
 
             picture = Image.open(path).convert("RGBA")
             picture.thumbnail(box, Image.LANCZOS)
+            if hard_edges:
+                picture.putalpha(picture.getchannel("A").point(lambda value: 255 if value >= ALPHA_CUT else 0))
             image = ImageTk.PhotoImage(picture, master=self.master)
         except ImportError:
             try:
@@ -65,7 +73,7 @@ class CharacterArt:
                 image = None
         except (OSError, ValueError):  # unreadable or broken personal images fall back to the placeholder
             image = None
-        self._images[(path, box)] = image
+        self._images[(path, box, hard_edges)] = image
         return image
 
 
