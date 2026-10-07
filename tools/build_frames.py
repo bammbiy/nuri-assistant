@@ -210,6 +210,33 @@ CHARACTERS = {
         ),
     ),
 
+    "reika": dict(
+        eye_px=0.767 * 89,
+        base=dict(
+            # The sheet background (window frames, sticky notes, calendars, gears) does not touch
+            # the bust and is dropped as separate blobs.
+            sheet="reference_sheet.webp", crop=(1060, 0, 1960, 1116), mid=(1500, 368), dist=140,
+            talk=((1502, 458), (21, 15)),
+            blink=((1368, 1460, 340, 390), (1540, 1637, 340, 390)), skin=(1500, 388), lash=3.0, feather=2.0,
+        ),
+        full=dict(crop=(200, 40, 640, 1116), top=88, bottom=1095, mid=(378.25, 192.25), dist=56.5,
+                  face=dict(oval=(0.9, -0.55, 1.0))),
+        expressions=dict(
+            sheet="reference_expressions.webp",
+            columns=((80, 685), (685, 1318), (1318, 1960)), rows=((15, 512), (580, 1060)),
+            # Happy has closed eyes and thinking looks aside: their mids are the eye shapes' centers.
+            mids=dict(happy=(373, 220), thinking=(1003, 230), surprised=(1627.5, 230),
+                      sad=(375, 788), angry=(1001.5, 790), shy=(1635, 790)),
+            dist=dict(happy=103, thinking=102, surprised=89, sad=94, angry=97, shy=94),
+            # Happy and thinking panels are drawn about 15% smaller; shy looks aside, so its eye
+            # mid sits left of the face center.
+            adjust=dict(happy=(1.15, -2.5, -6.5), thinking=(1.155, 2.5, 3), surprised=(1.0, 2, 1.5),
+                        sad=(0.985, -1, 0.5), angry=(1.03, 1.5, 3.5), shy=(0.9925, 6, 2.5)),
+            talk=dict(thinking=((1003, 285), (10, 7)), sad=((378, 850), (10, 7)), angry=((1002, 850), (10, 7)),
+                      shy=((1630, 850), (10, 7))),
+        ),
+    ),
+
 }
 
 def place(img, mid, k):

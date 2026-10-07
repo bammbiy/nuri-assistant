@@ -25,7 +25,7 @@ python -m unittest discover -s tests                         # 저장소 루트�
 python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 97개 통과)
 python -m pyflakes src tests tools
 pip install -r tools/requirements-frames.txt                 # 프레임 생성 도구용 (앱에는 필요 없음)
-python tools/build_frames.py nuri|sera|yuki|akane|shizuku|hinata|sakura [출력폴더]   # 캐릭터 프레임 재생성
+python tools/build_frames.py nuri|sera|yuki|akane|shizuku|hinata|sakura|reika [출력폴더]   # 캐릭터 프레임 재생성
 ```
 
 - Python 3.10 이상(3.11 권장). 앱 실행에 외부 패키지는 필요 없습니다. Pillow는 선택(있으면 썸네일 축소가 부드러움).
@@ -132,9 +132,9 @@ tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창�
 | shizuku | 시즈쿠 | 쿠데레 | 너 | 상반신+전신 | 冥鳴ひまり (14) |
 | hinata | 히나타 | 백갸루 소꿉친구 (금발 사이드 포니테일·비취색 포인트) | 너 | 상반신+전신 | 雨晴はう (10) |
 | sakura | 사쿠라 | 상냥한 메이드 | 주인님 | 상반신+전신 | 九州そら あまあま (15) |
-| reika | 레이카 | 오죠사마 | 당신 | 도형 임시 (시트 프롬프트 준비됨) | 四国めたん ノーマル (2) |
+| reika | 레이카 | 오죠사마 | 당신 | 상반신+전신 | 四国めたん ノーマル (2) |
 
-목소리 id는 VOICEVOX 기본값 기준이며 실제 설치본에서 확인 전입니다.
+목소리 id는 VOICEVOX 기본값 기준이며 실제 설치본에서 확인 전입니다. 8명 모두 그림이 있어 도형 임시 캐릭터(`ui/character/placeholder.py`)는 이제 그림 파일이 없을 때(개인 폴더만 쓰거나 파일이 빠졌을 때)의 대비용입니다.
 
 캐릭터 추가 절차:
 1. `companion/personas.py`의 `PERSONAS`에 `Persona` 추가 (대사 틀, `voice_id`, 임시 그림 색 포함).
@@ -151,4 +151,4 @@ tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창�
 
 - 실제 PC(Windows)에서 종합 확인: Ollama 도구 호출, VOICEVOX 음성과 기본 목소리 id, 네이버 API(쿠팡 상품 포함 여부), 투명 배경, 고배율 화면(앱이 DPI 인식을 하지 않아 125%·150%에서 Windows가 창을 늘려 그림이 흐릴 수 있음 — 확인 후 `SetProcessDpiAwareness` 검토), 오른쪽 아래 위치·항상 위 유지
 - 파일 정리 기능을 대화 도구로 연결 (미리보기·확인 카드 재사용)
-- 레이카 그림 (마지막 남은 캐릭터). 제미나이 프롬프트는 `assets/characters/README.md`에 있음 → 사용자가 시트 2장을 뽑아 오면 프레임 작업. 시트 생성 프롬프트는 기존 시트를 첨부하고 그림체를 문장으로 고정해야 함(제미나이가 그림체를 잘 못 맞춤, `assets/characters/README.md`. 표정 시트는 새 대화에서 그 캐릭터 기본 시트 한 장만 첨부해야 함(여러 장 붙이면 첨부 이미지를 겹쳐 넣음). 끝까지 겹치면 표정을 한 칸씩 6장 받아 3×2로 이어 붙여 씀)
+- 캐릭터 그림은 8명 모두 완료(2026-10-07). 새 캐릭터를 더 만들 때 시트 생성 프롬프트는 기존 시트를 첨부하고 그림체를 문장으로 고정해야 함(제미나이가 그림체를 잘 못 맞춤, `assets/characters/README.md`. 표정 시트는 새 대화에서 그 캐릭터 기본 시트 한 장만 첨부해야 함(여러 장 붙이면 첨부 이미지를 겹쳐 넣음). 끝까지 겹치면 표정을 한 칸씩 6장 받아 3×2로 이어 붙여 씀)

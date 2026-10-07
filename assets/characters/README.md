@@ -18,7 +18,7 @@
 | `shizuku` | 시즈쿠 | 쿠데레, 은청색 단발 | 상반신+전신 |
 | `hinata` | 히나타 | 백갸루 소꿉친구, 금발 사이드 포니테일 + 비취색 브릿지 | 상반신+전신 |
 | `sakura` | 사쿠라 | 상냥한 메이드, 벚꽃색 긴 머리 | 상반신+전신 |
-| `reika` | 레이카 | 오죠사마, 금발 드릴 머리 | 도형 임시 (시트 대기) |
+| `reika` | 레이카 | 오죠사마, 금발 드릴 머리 | 상반신+전신 |
 
 표정별 파일 이름은 다음과 같습니다. `neutral.png`만 있어도 동작하고, 없는 표정은 `neutral.png`로 대신합니다.
 
@@ -165,6 +165,14 @@ python tools/build_frames.py nuri   # 세라는 sera, 유키는 yuki
 - 기쁨(눈 감음)과 생각(곁눈질) 칸이 10% 남짓 작게 그려져 `adjust`로 키웠습니다. 생각은 머리를 살짝 기울여 다른 표정보다 겹침이 조금 낮습니다(머리 폭은 ±1%).
 - 깜빡임은 두 눈 사이 피부 한 점 색(`skin=(1470, 390)`).
 - 말하는 입: `neutral_talk`, `happy_talk`, `thinking_talk`, `sad_talk`, `shy_talk`.
+
+## 레이카 이미지 현황
+
+`reika/` 폴더 (`python tools/build_frames.py reika`). 기본 시트 배경에 창·메모지·달력·톱니바퀴가 많지만 모두 캐릭터와 떨어져 있어 자동으로 지워집니다(전신 다리 뒤의 창 패널도 배경 제거가 걸러 냄).
+
+- 기쁨(눈 감음)과 생각(곁눈질) 칸이 15% 작게 그려져 `adjust`로 키웠습니다. 부끄럼은 시선을 옆으로 돌려 눈 중점이 얼굴 중심에서 비켜나 있어 dx가 큽니다. 보정 후 머리 폭 190~191px.
+- 깜빡임은 두 눈 사이 피부 한 점 색(`skin=(1500, 388)`).
+- 말하는 입: `neutral_talk`, `thinking_talk`, `sad_talk`, `angry_talk`, `shy_talk` (기쁨·놀람은 이미 입을 벌림).
 
 ## 시트 생성 프롬프트에 꼭 넣을 것 (제미나이용)
 
@@ -350,7 +358,7 @@ lowres, worst quality, bad quality, bad anatomy, bad hands, extra fingers, text,
 
 ## 전신 프레임 (`full/`)
 
-`nuri/`, `sera/`, `yuki/`, `akane/`, `shizuku/`, `hinata/`, `sakura/`의 `full/`에는 전신 모드용 프레임(405×480)이 들어 있습니다. `python tools/build_frames.py <id>`가 상반신 프레임과 함께 만듭니다.
+`nuri/`, `sera/`, `yuki/`, `akane/`, `shizuku/`, `hinata/`, `sakura/`, `reika/`의 `full/`에는 전신 모드용 프레임(405×480)이 들어 있습니다. `python tools/build_frames.py <id>`가 상반신 프레임과 함께 만듭니다.
 
 - 기본 시트 왼쪽의 전신 그림을 잘라 배경을 지우고, 키가 462px이 되게 줄입니다.
 - 표정 7종, 말하는 입, 눈 깜빡임은 상반신 프레임의 **얼굴 전체**(앞머리·눈 띠, 그리고 눈·코·입·홍조가 든 피부 영역)를 눈 위치에 맞춰 붙입니다. 네 캐릭터 모두 전신 얼굴과 상반신 얼굴의 비율(눈 사이·코·입·턱)이 같아서, 얼굴을 통째로 바꿔야 눈·코·입이 서로 맞습니다. 눈·입만 붙이면 전신 원래 코·턱과 섞여 어긋나 보입니다.
