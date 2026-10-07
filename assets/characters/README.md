@@ -15,8 +15,8 @@
 | `sera` | 세라 | 어른스러운 누나 비서, 검은 긴 생머리 | 상반신+전신 |
 | `yuki` | 유키 | 나긋나긋한 힐링계 비서, 백발 웨이브 장발 | 상반신+전신 |
 | `akane` | 아카네 | 츤데레, 빨간 트윈테일 | 상반신+전신 |
-| `shizuku` | 시즈쿠 | 쿠데레, 은청색 단발 (그림 있음) | 도형 임시 |
-| `hinata` | 히나타 | 활발한 소꿉친구, 주황 포니테일 | 도형 임시 |
+| `shizuku` | 시즈쿠 | 쿠데레, 은청색 단발 | 상반신+전신 |
+| `hinata` | 히나타 | 백갸루 소꿉친구, 금발 사이드 포니테일 + 비취색 브릿지 | 도형 임시 (시트 대기) |
 | `sakura` | 사쿠라 | 상냥한 메이드, 분홍 긴 머리 | 도형 임시 |
 | `reika` | 레이카 | 오죠사마, 금발 드릴 머리 | 도형 임시 |
 
@@ -69,7 +69,7 @@ lowres, bad anatomy, bad hands, extra fingers, text, watermark, signature, multi
 |---|---|
 | akane | `red hair, twintails, hair ribbon, orange eyes, school uniform, navy blazer, tsundere, pout` |
 | shizuku | `silver blue hair, short hair, bob cut, hairclip, blue eyes, expressionless, dark cardigan, calm` |
-| hinata | `orange hair, ponytail, scrunchie, green eyes, white t-shirt, energetic, bright smile` |
+| hinata | `gyaru, shiro gyaru, fair skin, platinum blonde hair, jade green streaked hair, side ponytail, scrunchie, jade green eyes, long eyelashes, jade earrings, jade nails, cropped knit top, off-shoulder cardigan, denim shorts, bright grin` |
 | sakura | `pink hair, long hair, maid headdress, maid, apron, red purple eyes, gentle smile` |
 | reika | `blonde hair, drill hair, tiara, purple eyes, elegant dress, ojou-sama, confident` |
 
@@ -165,6 +165,37 @@ python tools/build_frames.py nuri   # 세라는 sera, 유키는 yuki
 - 머리카락과 겹치는 포스트잇, 아이콘, 효과선은 없을수록 좋습니다. 따로 떨어진 장식은 자동으로 지워지지만, 머리에 붙은 것은 남습니다.
 - 두 눈이 모두 보여야 합니다. 앞머리로 한쪽 눈을 가리는 디자인은 표정끼리 위치를 맞추기 어렵습니다.
 - 가로 2000px 이상의 고화질로 뽑아 주세요.
+
+## 히나타 이미지 프롬프트 (백갸루 소꿉친구, 제미나이용)
+
+기존 시트 2~3장(`nuri/`, `akane/`, `shizuku/`의 `reference_sheet.webp`)을 같이 첨부하고 보냅니다. 성인(대학생 나이)으로 고정하고, 옷은 입은 상태로 세라·유키 수준까지만.
+
+**기본 시트**
+
+```text
+첨부한 캐릭터 시트들과 완전히 같은 그림체로 새 오리지널 캐릭터 디자인 시트를 그려 줘.
+그림체 고정: 가는 짙은 갈색 외곽선, 부드러운 2단 셀 채색, 크고 반짝이는 눈(하이라이트 2~3개), 볼에 옅은 홍조, 성인 비율의 얼굴과 몸,
+파스텔 조명. 실사·반실사·3D·수채화·두꺼운 검은 선은 금지. 첨부 캐릭터들 옆에 세워도 같은 작가가 그린 것처럼 보여야 해.
+
+캐릭터: 성인 여성(20대 초반 대학생), 주인공의 소꿉친구인 "백갸루"(하얀 피부의 갸루). 밝고 장난스러운 표정, 한쪽 송곳니가 보이는 웃음.
+머리: 플래티넘 금발 사이드 포니테일(오른쪽 위로 높게), 비취색(제이드 그린) 브릿지와 안쪽 컬러, 비취색 슈슈. 앞머리는 눈을 가리지 않게.
+눈: 비취색 눈, 긴 속눈썹, 은은한 갸루 메이크업(살짝 올라간 아이라인, 핑크 립글로스). 피부는 하얗게(태닝 금지).
+액세서리: 작은 비취색 귀걸이, 비취색 네일, 얇은 초커.
+옷: 몸에 붙는 흰색 크롭 니트 탑, 어깨에 걸친 연한 비취색 오버사이즈 가디건, 하이웨이스트 데님 쇼츠, 흰 루즈삭스와 스니커즈.
+체형: 볼륨감 있는 글래머 체형(큰 가슴, 잘록한 허리, 넓은 골반, 탄탄한 허벅지). 옷은 다 입은 상태, 노출 과하게 하지 말 것.
+
+구도: 왼쪽에 정면 전신(머리끝부터 발끝까지 잘리지 않게), 오른쪽에 크게 정면 상반신(머리부터 가슴 아래까지).
+배경은 연한 단색, 캐릭터와 겹치는 소품·아이콘·글자 없음. 가로 2000px 이상 고화질.
+```
+
+**표정 시트**
+
+```text
+방금 그린 히나타와 완전히 같은 디자인·같은 그림체로 표정 시트를 만들어 줘.
+3열 2줄, 칸마다 정면 상반신 한 명: 기쁨(활짝 웃음), 생각(눈 위로 굴리기), 놀람 / 슬픔(눈물 글썽), 화남(볼 부풀려 삐짐), 부끄럼(얼굴 빨개짐).
+6칸 모두 얼굴 크기·머리 위치·구도가 똑같아야 해. 손이 얼굴을 가리지 않게, 두 눈이 항상 보이게(기쁨도 눈 뜬 웃음이면 더 좋음).
+칸 아래 한글 이름표는 얼굴과 떨어뜨리고, 칸 테두리선·아이콘·효과선은 넣지 말 것. 배경은 연한 단색. 가로 2000px 이상 고화질.
+```
 
 ## 세라 이미지 프롬프트
 
