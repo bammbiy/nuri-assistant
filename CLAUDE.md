@@ -18,7 +18,7 @@ python src/run_nuri.py --classic  # 파일 정리 도구만
 python -m unittest discover -s tests                         # 저장소 루트에서 (테스트는 src.nuri_assistant 로 import)
 python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 78개 통과)
 python -m pyflakes src tests tools
-python tools/build_frames.py nuri|sera|yuki [출력폴더]              # 캐릭터 프레임 재생성 (pillow numpy scipy rembg onnxruntime 필요)
+python tools/build_frames.py nuri|sera|yuki|akane [출력폴더]              # 캐릭터 프레임 재생성 (pillow numpy scipy rembg onnxruntime 필요)
 ```
 
 - Python 3.11 이상. 앱 실행에 외부 패키지는 필요 없습니다. Pillow는 선택(있으면 썸네일 축소가 부드러움).
@@ -89,7 +89,7 @@ tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터�
 | nuri | 누리 | 다정한 후배 비서 (기본) | 선배 | 상반신+전신 | 春日部つむぎ (8) |
 | sera | 세라 | 어른스러운 누나 비서 | 동생 | 상반신+전신 | 九州そら セクシー (17) |
 | yuki | 유키 | 나긋나긋한 힐링계 | 자기 | 상반신+전신 | WhiteCUL ノーマル (23) |
-| akane | 아카네 | 츤데레 | 너 | 도형 임시 | 四国めたん ツンツン (6) |
+| akane | 아카네 | 츤데레 | 너 | 상반신+전신 | 四国めたん ツンツン (6) |
 | shizuku | 시즈쿠 | 쿠데레 | 너 | 도형 임시 | 冥鳴ひまり (14) |
 | hinata | 히나타 | 활발한 소꿉친구 | 너 | 도형 임시 | 雨晴はう (10) |
 | sakura | 사쿠라 | 상냥한 메이드 | 주인님 | 도형 임시 | 九州そら あまあま (15) |
@@ -111,4 +111,4 @@ tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터�
 - 실제 PC(Windows)에서 종합 확인: Ollama 도구 호출, VOICEVOX 음성과 기본 목소리 id, 네이버 API(쿠팡 상품 포함 여부), 투명 배경, 고배율 화면
 - 파일 정리 기능을 대화 도구로 연결 (미리보기·확인 카드 재사용)
 - 대화 기록 창을 파스텔 디자인으로 교체
-- 나머지 5명 캐릭터 그림
+- 나머지 4명 캐릭터 그림 (시즈쿠·히나타·사쿠라·레이카). 시트 생성 프롬프트는 기존 시트를 첨부하고 그림체를 문장으로 고정해야 함(제미나이가 그림체를 잘 못 맞춤, `assets/characters/README.md`)

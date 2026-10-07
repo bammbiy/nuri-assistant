@@ -114,6 +114,29 @@ CHARACTERS = {
             talk=dict(thinking=((1001, 278), (11, 8)), sad=((390, 830), (11, 8)), angry=((1000, 833), (11, 8))),
         ),
     ),
+    "akane": dict(
+        eye_px=0.767 * 89,
+        base=dict(
+            sheet="reference_sheet.webp", crop=(1060, 0, 1960, 1116), mid=(1487.5, 364), dist=125,
+            talk=((1490, 440), (19.5, 15.6)),
+            blink=((1395, 1450, 341, 381), (1526, 1580, 341, 381)), skin="lerp", lash=3.0, feather=1.5,
+        ),
+        full=dict(crop=(150, 20, 620, 1116), top=51, bottom=1095, mid=(379, 194), dist=52,
+                  face=dict(oval=(0.9, -0.55, 1.0), bottom={"thinking": 0.85, "shy": 0.85})),
+        expressions=dict(
+            # Rows stop above the name labels; a stray check mark in the thinking panel is a
+            # separate blob and is dropped by the cleanup.
+            sheet="reference_expressions.webp",
+            columns=((100, 690), (700, 1300), (1310, 1950)), rows=((15, 455), (555, 1000)),
+            mids=dict(happy=(400, 245), thinking=(1002, 247), surprised=(1596, 248),
+                      sad=(388, 773), angry=(998, 773), shy=(1604, 776)),
+            dist=dict(happy=80, thinking=82, surprised=78, sad=90, angry=83, shy=95),
+            # Hair silhouette weighs more than skin here: angry's puffed cheeks widen the face.
+            adjust=dict(happy=(1.01, 0, -6), thinking=(1.03, 3.5, -3.5), surprised=(0.98, -0.5, -2.5),
+                        sad=(1.08, -2, -8), angry=(0.99, 0, -8), shy=(1.135, 3.5, -6)),
+            talk=dict(happy=((400, 300), (10, 7)), thinking=((998, 298), (10, 7)), sad=((390, 830), (10, 7))),
+        ),
+    ),
 }
 
 def place(img, mid, k):
