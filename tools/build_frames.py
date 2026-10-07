@@ -159,6 +159,57 @@ CHARACTERS = {
                       shy=((1650, 838), (10, 7))),
         ),
     ),
+    "hinata": dict(
+        eye_px=0.767 * 89,
+        base=dict(
+            # Neutral is already an open-mouthed grin, so it gets no talking frame (talk=None).
+            # The sheet background (window frame, calendar, icons) does not touch the figure.
+            sheet="reference_sheet.webp", crop=(1060, 0, 1960, 1116), mid=(1497.5, 367.5), dist=139, talk=None,
+            blink=((1382, 1457, 340, 392), (1537, 1622, 338, 390)), skin=(1520, 383), lash=3.0, feather=2.0,
+        ),
+        # Background removal leaves a faint gray haze in the gap between the jaw and the hair;
+        # the hair's real edges are dark outlines, so bright semi-transparent pixels are haze.
+        alpha=dict(floor=60, gain=1.35, haze_lum=90),
+        full=dict(crop=(185, 40, 610, 1116), top=72, bottom=1098, mid=(378, 191), dist=57,
+                  face=dict(oval=(0.9, -0.55, 1.0))),
+        expressions=dict(
+            sheet="reference_expressions.webp",
+            columns=((100, 700), (700, 1335), (1335, 1960)), rows=((10, 512), (565, 1070)),
+            # Thinking rolls the irises up and aside: its mid is the eye shapes' center.
+            mids=dict(happy=(345, 249), thinking=(995, 247), surprised=(1620.5, 248),
+                      sad=(351, 788), angry=(990, 793), shy=(1628, 792)),
+            dist=dict(happy=90, thinking=95, surprised=85, sad=92, angry=90, shy=90),
+            # Thinking's panel is drawn 8% smaller; found by the silhouette overlay (onion skin).
+            adjust=dict(happy=(1.02, 1, -1), thinking=(1.08, 4.5, -2), surprised=(0.9625, 1, -2),
+                        sad=(1.015, 1, -5), angry=(0.9925, -0.5, -1), shy=(0.9925, -0.5, -3)),
+            talk=dict(thinking=((990, 305), (10, 7)), sad=((352, 850), (10, 7))),
+        ),
+    ),
+    "sakura": dict(
+        eye_px=0.767 * 89,
+        base=dict(
+            sheet="reference_sheet.webp", crop=(1060, 0, 1960, 1116), mid=(1485, 370), dist=140,
+            talk=((1487, 454), (21, 15)),
+            blink=((1370, 1448, 337, 387), (1522, 1610, 337, 387)), skin=(1470, 390), lash=3.0, feather=2.0,
+        ),
+        # The tea tray in the full-body figure's hand stays (it is part of the same blob).
+        full=dict(crop=(130, 40, 670, 1116), top=88, bottom=1095, mid=(374.5, 193), dist=56,
+                  face=dict(oval=(0.9, -0.55, 1.0))),
+        expressions=dict(
+            sheet="reference_expressions.webp",
+            columns=((80, 685), (685, 1315), (1315, 1960)), rows=((20, 516), (590, 1056)),
+            # Happy has closed eyes and thinking looks aside: their mids are the eye shapes' centers.
+            mids=dict(happy=(365, 240), thinking=(999, 245), surprised=(1628, 242),
+                      sad=(362.5, 813), angry=(1000, 812), shy=(1637.5, 812)),
+            dist=dict(happy=96, thinking=98, surprised=90, sad=95, angry=94, shy=95),
+            # Happy and thinking panels are drawn about 10% smaller (silhouette and face skin agree).
+            adjust=dict(happy=(1.095, 3, -4.5), thinking=(1.135, 6.5, 1.5), surprised=(1.02, -1.5, -4),
+                        sad=(1.0075, 0.5, -2.5), angry=(1.0, 0.5, -3), shy=(1.0075, 1.5, -2.5)),
+            talk=dict(happy=((365, 295), (10, 7)), thinking=((1010, 300), (10, 7)), sad=((365, 875), (10, 7)),
+                      shy=((1638, 873), (10, 7))),
+        ),
+    ),
+
 }
 
 def place(img, mid, k):
@@ -382,8 +433,9 @@ def build(name, out):
     k = config["eye_px"] / base["dist"]
     neutral = place(remove(rgb, session=session).convert("RGBA"), mid, k)
     frames["neutral"] = neutral
-    (mouth, (mw, mh)) = base["talk"]
-    frames["neutral_talk"] = talk(neutral, to_out(shift(mouth), mid, k), (mw * k, mh * k))
+    if base["talk"]:
+        (mouth, (mw, mh)) = base["talk"]
+        frames["neutral_talk"] = talk(neutral, to_out(shift(mouth), mid, k), (mw * k, mh * k))
     if base["skin"] in ("ring", "lerp"):
         skin = base["skin"]
     else:
