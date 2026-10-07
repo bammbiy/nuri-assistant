@@ -23,7 +23,7 @@ python -m unittest discover -s tests                         # 저장소 루트�
 python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 97개 통과)
 python -m pyflakes src tests tools
 pip install -r tools/requirements-frames.txt                 # 프레임 생성 도구용 (앱에는 필요 없음)
-python tools/build_frames.py nuri|sera|yuki|akane [출력폴더]   # 캐릭터 프레임 재생성
+python tools/build_frames.py nuri|sera|yuki|akane|shizuku [출력폴더]   # 캐릭터 프레임 재생성
 ```
 
 - Python 3.10 이상(3.11 권장). 앱 실행에 외부 패키지는 필요 없습니다. Pillow는 선택(있으면 썸네일 축소가 부드러움).
@@ -127,7 +127,7 @@ tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창�
 | sera | 세라 | 어른스러운 누나 비서 | 동생 | 상반신+전신 | 九州そら セクシー (17) |
 | yuki | 유키 | 나긋나긋한 힐링계 | 자기 | 상반신+전신 | WhiteCUL ノーマル (23) |
 | akane | 아카네 | 츤데레 | 너 | 상반신+전신 | 四国めたん ツンツン (6) |
-| shizuku | 시즈쿠 | 쿠데레 | 너 | 도형 임시 | 冥鳴ひまり (14) |
+| shizuku | 시즈쿠 | 쿠데레 | 너 | 상반신+전신 | 冥鳴ひまり (14) |
 | hinata | 히나타 | 활발한 소꿉친구 | 너 | 도형 임시 | 雨晴はう (10) |
 | sakura | 사쿠라 | 상냥한 메이드 | 주인님 | 도형 임시 | 九州そら あまあま (15) |
 | reika | 레이카 | 오죠사마 | 당신 | 도형 임시 | 四国めたん ノーマル (2) |
@@ -148,4 +148,4 @@ tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창�
 
 - 실제 PC(Windows)에서 종합 확인: Ollama 도구 호출, VOICEVOX 음성과 기본 목소리 id, 네이버 API(쿠팡 상품 포함 여부), 투명 배경, 고배율 화면(앱이 DPI 인식을 하지 않아 125%·150%에서 Windows가 창을 늘려 그림이 흐릴 수 있음 — 확인 후 `SetProcessDpiAwareness` 검토), 오른쪽 아래 위치·항상 위 유지
 - 파일 정리 기능을 대화 도구로 연결 (미리보기·확인 카드 재사용)
-- 나머지 4명 캐릭터 그림 (시즈쿠·히나타·사쿠라·레이카). 시트 생성 프롬프트는 기존 시트를 첨부하고 그림체를 문장으로 고정해야 함(제미나이가 그림체를 잘 못 맞춤, `assets/characters/README.md`)
+- 나머지 3명 캐릭터 그림 (히나타·사쿠라·레이카). 시트 생성 프롬프트는 기존 시트를 첨부하고 그림체를 문장으로 고정해야 함(제미나이가 그림체를 잘 못 맞춤, `assets/characters/README.md`)

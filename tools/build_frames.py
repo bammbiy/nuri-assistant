@@ -139,6 +139,29 @@ CHARACTERS = {
             talk=dict(happy=((400, 300), (10, 7)), thinking=((998, 298), (10, 7)), sad=((390, 830), (10, 7))),
         ),
     ),
+    "shizuku": dict(
+        eye_px=0.767 * 89,
+        base=dict(
+            sheet="reference_sheet.webp", crop=(1080, 0, 1960, 1116), mid=(1495.5, 370), dist=139,
+            talk=((1497.5, 459), (21, 15)),
+            blink=((1390, 1460, 345, 390), (1534, 1602, 345, 390)), skin=(1497, 372), lash=3.0, feather=2.0,
+        ),
+        # The sheet background has sticky notes and a calendar; they are separate blobs and
+        # are dropped with everything else that does not touch the figure.
+        full=dict(crop=(226, 40, 560, 1116), top=76, bottom=1093, mid=(375.25, 189), dist=55.5,
+                  face=dict(oval=(0.9, -0.55, 1.0))),
+        expressions=dict(
+            sheet="reference_expressions.webp",
+            columns=((100, 700), (720, 1320), (1340, 1960)), rows=((20, 470), (570, 1005)),
+            mids=dict(happy=(355, 238), thinking=(997.5, 243), surprised=(1647, 245),
+                      sad=(352.5, 778), angry=(1001, 771), shy=(1652.5, 772)),
+            dist=dict(happy=97, thinking=95, surprised=91.5, sad=98, angry=92, shy=95),
+            adjust=dict(happy=(0.995, 0, -4.5), thinking=(0.97, -2.5, -1), surprised=(0.93, -0.5, 1),
+                        sad=(1.01, -0.5, -1.5), angry=(0.955, 0.5, -6.5), shy=(0.995, 0, -4.5)),
+            talk=dict(happy=((357, 304), (10, 7)), thinking=((1001, 306), (10, 7)), sad=((353, 840), (10, 7)),
+                      shy=((1650, 838), (10, 7))),
+        ),
+    ),
 }
 
 def place(img, mid, k):
