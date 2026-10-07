@@ -84,6 +84,7 @@ HELD_NOTICE_DELAY_MS = 3500
 HELD_NOTICE_GAP_MS = 4000
 # Pointer travel (px) before a press on the character counts as a drag, not a poke.
 DRAG_THRESHOLD_PX = 4
+CHAT_GAP = 3  # px between the character's bottom and the chat box
 KEEP_ON_TOP_MS = 3000  # re-assert topmost / on-screen
 # Windows keys this exact color out of the window. A near-black key keeps
 # anti-aliased PNG edges looking like line art instead of a colored halo.
@@ -391,10 +392,12 @@ class MascotApp(tk.Tk):
             head_top = CHAR_TOP + self.extra
             draw_placeholder(self.canvas, WIDTH // 2, head_top, self.persona.look, self.expression, mouth, self.blinking)
         else:
-            top = self.char_bottom - image.height()
+            # Seat the visible bottom (bust cut line / feet) just above the chat box.
+            bottom = self.chat.top - CHAT_GAP + image.height() - self.art.content_bottom(image)
+            top = bottom - image.height()
             head_top = top + 12
             self.canvas.delete("character")
-            self.canvas.create_image(WIDTH // 2, self.char_bottom, anchor="s", image=image, tags="character")
+            self.canvas.create_image(WIDTH // 2, bottom, anchor="s", image=image, tags="character")
             if not has_expression:
                 draw_emote(self.canvas, WIDTH // 2 + int(image.width() * 0.3), top + int(image.height() * 0.2), self.expression)
         if head_top != self.head_top:

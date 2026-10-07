@@ -22,6 +22,7 @@ class CharacterArt:
         self.assets_dir = assets_dir
         self._images: dict[tuple[Path, tuple[int, int], bool], tk.PhotoImage | None] = {}
         self._faces: dict[tuple[str, int, str], tk.PhotoImage | None] = {}
+        self._bottoms: dict[str, int] = {}
 
     def art_dirs(self, persona_id: str, full: bool) -> list[Path]:
         """Where frames are looked up; full-body art is used only when it exists, never mixed."""
@@ -78,6 +79,23 @@ class CharacterArt:
             image = None
         self._images[(path, box, hard_edges)] = image
         return image
+
+    def content_bottom(self, image: tk.PhotoImage) -> int:
+        """Height down to the lowest row with a visible pixel (bust frames end above their
+        transparent bottom strip), so the caller can seat the art right on the chat box."""
+
+        key = str(image)
+        if key not in self._bottoms:
+            # Raw Tcl call: works for tk.PhotoImage and Pillow's ImageTk.PhotoImage alike.
+            transparent = lambda x, y: self.master.tk.getboolean(self.master.tk.call(key, "transparency", "get", x, y))
+            width, height = image.width(), image.height()
+            bottom = height
+            for y in range(height - 1, -1, -1):
+                if any(not transparent(x, y) for x in range(0, width, 3)):
+                    bottom = y + 1
+                    break
+            self._bottoms[key] = bottom
+        return self._bottoms[key]
 
     def face(self, persona_id: str, size: int, background: str) -> tk.PhotoImage | None:
         """Round face icon (MomoTalk style) cut from the neutral bust frame, or None.
