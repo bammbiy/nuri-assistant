@@ -10,9 +10,8 @@ from urllib.error import HTTPError
 from src.nuri_assistant.companion import ToolBox
 from src.nuri_assistant.pricewatch import (
     NaverShopping, Offer, PriceChecker, PriceSourceError, PriceTools, WatchStore,
-    fetch_page_price, relevant,
+    fetch_page_price, parse_price, relevant,
 )
-from src.nuri_assistant.pricewatch.tools import _price
 from src.nuri_assistant.schedule import ScheduleStore, ScheduleTools
 
 
@@ -120,11 +119,11 @@ class CheckerAndToolsTest(unittest.TestCase):
         self.assertIn("API 키", self.store.get(watch.id).last_error)
 
     def test_price_words(self) -> None:
-        self.assertEqual(_price("30만원"), 300000)
-        self.assertEqual(_price("29만 9천원"), 299000)
-        self.assertEqual(_price("1,250,000"), 1250000)
-        self.assertEqual(_price(300000), 300000)
-        self.assertIsNone(_price(""))
+        self.assertEqual(parse_price("30만원"), 300000)
+        self.assertEqual(parse_price("29만 9천원"), 299000)
+        self.assertEqual(parse_price("1,250,000"), 1250000)
+        self.assertEqual(parse_price(300000), 300000)
+        self.assertIsNone(parse_price(""))
 
     def test_add_and_remove_need_confirmation(self) -> None:
         result = self.tools.execute("add_price_watch", {"query": "에어팟 프로", "target_price": "30만원"})

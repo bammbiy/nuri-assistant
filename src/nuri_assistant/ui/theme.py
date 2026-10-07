@@ -29,6 +29,24 @@ def round_rect(canvas: tk.Canvas, x1: float, y1: float, x2: float, y2: float, r:
     return canvas.create_polygon(*points, smooth=True, **options)
 
 
+def draw_pill(
+    canvas: tk.Canvas, x1: int, y1: int, x2: int, y2: int,
+    fill: str, outline: str = "", width: int = 1, *, tags: str | tuple[str, ...],
+) -> None:
+    """Fully rounded rectangle; fill parts and outline parts are separate items."""
+
+    r = (y2 - y1) // 2
+    for x, start in ((x1, 90), (x2 - 2 * r, 270)):
+        canvas.create_arc(x, y1, x + 2 * r, y2, start=start, extent=180, style="pieslice", fill=fill, outline="", tags=tags)
+    canvas.create_rectangle(x1 + r, y1, x2 - r, y2, fill=fill, outline="", tags=tags)
+    if not outline:
+        return
+    for x, start in ((x1, 90), (x2 - 2 * r, 270)):
+        canvas.create_arc(x, y1, x + 2 * r, y2, start=start, extent=180, style="arc", outline=outline, width=width, tags=tags)
+    for y in (y1, y2):
+        canvas.create_line(x1 + r, y, x2 - r, y, fill=outline, width=width, tags=tags)
+
+
 def fit(text: str, font: tuple, max_width: int) -> str:
     """Cut text to one line with an ellipsis so it never runs into the line below."""
 

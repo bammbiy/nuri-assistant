@@ -9,7 +9,8 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-LOG_PATH = Path.home() / ".nuri-assistant" / "error.log"
+from .paths import ERROR_LOG as LOG_PATH
+
 MAX_BYTES = 512_000
 
 

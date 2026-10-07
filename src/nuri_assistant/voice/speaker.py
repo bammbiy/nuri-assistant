@@ -37,9 +37,6 @@ class VoiceSpeaker:
         thread.start()
         return thread
 
-    def cancel(self) -> None:
-        self._generation += 1
-
     def _run(self, generation: int, voice_id: int, japanese: str, korean: str) -> None:
         try:
             text = japanese.strip() or (self.translate(korean) if korean.strip() else "")

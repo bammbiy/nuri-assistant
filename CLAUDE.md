@@ -15,40 +15,61 @@
 ```bash
 python src/run_nuri.py            # 캐릭터 비서 (비서 선택 화면부터). Windows는 start_nuri.bat 더블클릭
 python src/run_nuri.py --classic  # 파일 정리 도구만
+python -m nuri_assistant [--classic]   # 같은 실행 (src/ 안에서, 또는 pip install -e . 뒤 어디서나. 설치하면 nuri-assistant 명령도 생김)
+pip install -e .[dev]             # 선택: 개발용 설치(pyflakes). 그림이 assets/에 있어서 편집 설치(-e)만 지원
 python -m unittest discover -s tests                         # 저장소 루트에서 (테스트는 src.nuri_assistant 로 import)
-python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 78개 통과)
+python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 92개 통과)
 python -m pyflakes src tests tools
-python tools/build_frames.py nuri|sera|yuki|akane [출력폴더]              # 캐릭터 프레임 재생성 (pillow numpy scipy rembg onnxruntime 필요)
+pip install -r tools/requirements-frames.txt                 # 프레임 생성 도구용 (앱에는 필요 없음)
+python tools/build_frames.py nuri|sera|yuki|akane [출력폴더]   # 캐릭터 프레임 재생성
 ```
 
-- Python 3.11 이상. 앱 실행에 외부 패키지는 필요 없습니다. Pillow는 선택(있으면 썸네일 축소가 부드러움).
+- Python 3.10 이상(3.11 권장). 앱 실행에 외부 패키지는 필요 없습니다. Pillow는 선택(있으면 썸네일 축소가 부드러움).
 - 외부 프로그램: Ollama(기본 모델 `qwen3:8b`, 도구 호출 지원 필요), VOICEVOX(음성, 선택).
-- 단위 테스트는 tkinter 없이 돌아갑니다. `ui/`는 단위 테스트에서 import하지 않습니다.
+- 단위 테스트는 tkinter 없이 돌아갑니다. `ui/`는 단위 테스트에서 import하지 않습니다. 그래서 UI 모듈의 import 오류는 테스트로 안 잡히니, UI 파일을 옮기거나 import를 고치면 아래 방법으로 앱을 띄워 메뉴의 창을 모두 열어 봅니다.
+- 패키지 정보는 `pyproject.toml`(버전은 `nuri_assistant.__version__`과 같이 올림), 편집기 설정은 `.editorconfig`(`start_nuri.bat`은 일부러 cp949 + CRLF).
 - UI 확인 방법(클라우드 컨테이너): tkinter가 있는 `python3.12`로 `xvfb-run -a -s "-screen 0 1280x1000x24" python3.12 스크립트.py`를 실행하고, `import -window root -crop WxH+X+Y`로 캡처합니다. 가짜 Ollama·네이버·VOICEVOX 서버는 `http.server`로 만들어 `ollama_url`, `NaverShopping.URL`, `voice_url`을 그쪽으로 돌립니다. `MascotApp(app_dir)`에 임시 폴더를 넘기면 사용자 데이터를 건드리지 않습니다.
 - 컨테이너에서 확인할 수 없는 것: Windows 투명 배경(`-transparentcolor`), 맑은 고딕, 테두리 없는 창의 포커스, 고배율(125%/150%) 화면, 실제 Ollama·VOICEVOX·네이버 API. 이것들은 아직 실사용 확인 전입니다.
 
 ## 구조
 
 ```text
+src/run_nuri.py  실행 진입점 (start_nuri.bat이 부름). 내용은 nuri_assistant/app.py의 main()
 src/nuri_assistant/
+├── app.py       main(): --classic 인자, tkinter 확인, 시작 실패 기록·안내창, UI는 여기서 늦게 import
+├── __main__.py  python -m nuri_assistant
 ├── companion/   personas(캐릭터 8명: 성격·말투·대사 틀·기본 목소리), llm(Ollama 스트리밍+도구 호출),
 │                brain(모델→도구→모델 루프 최대 4회, 대화 기억, 일본어 번역), reply(표정 태그·<think>·<ja> 처리),
-│                memory(캐릭터별 대화), settings(companion.json), toolbox(도구 묶음 라우팅)
+│                memory(캐릭터별 대화), settings(companion.json),
+│                toolbox(도구 묶음 라우팅, ConfirmingTools 기반 클래스, "응"/"아니" 판정 parse_confirmation)
 ├── schedule/    timeparse(한국어 날짜 해석), store, tools(add/list/cancel_event)
 ├── todo/        store(마감·잔소리 시점), tools(add/list/complete/delete_todo)
 ├── focus/       timer(집중·휴식 단계), tools(start/stop/status) — 확인 카드 없이 바로 실행
 ├── pricewatch/  sources(네이버 쇼핑 검색 API, 상품 페이지 JSON-LD/메타), store, checker(알림 규칙), tools
 ├── voice/       voicevox(VOICEVOX 호환 HTTP), speaker(번역→합성→재생 스레드, 최신 대사 우선), player
-├── core/ metadata/ storage/ assistant/ shopping/   기존 파일 이름 정리 도구와 구매 비서
-└── ui/          mascot(캐릭터 창, 앱의 중심), chatbox, confirm_card, picker(비서 선택), placeholder(그림 없는 캐릭터),
-                 schedule_window, todo_window, price_window, price_settings, voice_settings, theme(색·공용 위젯),
-                 desktop(파일 정리 도구), assistant(옛 파일/구매 비서 창)
+├── classic/     기존 파일 이름 정리 도구와 구매 비서 (--classic, 메뉴 "파일 정리 도구"·"파일/구매 비서")
+│                core(스캔·이름 규칙·미리보기·실행·되돌리기), metadata(파일 이름에서 날짜·매체·면 추정),
+│                storage(history.sqlite3 이력, profiles.json 작업 프로필), commands(한국어 요청 → 이름 변경 계획),
+│                shopping(구매 체크리스트 점수, 선택 기능인 OpenAI 조사)
+├── paths.py     사용자 데이터 경로(APP_DIR, companion.json, *.sqlite3, profiles.json, error.log, characters/)와 ASSETS_DIR
+├── db.py        SQLite 연결 헬퍼 connect() (모든 저장소가 씀)
+├── services.py  캐릭터 앱의 저장소·가격 확인기·타이머·ToolBox 조립 (Tk 없이 만들 수 있음)
+├── announcements.py  AI를 거치지 않는 대사 조립: 일정 알림·잔소리·아침 브리핑·타이머·가격 알림
+├── crashlog.py  error.log 기록과 시작 실패 안내창
+└── ui/          theme(색·글꼴·공용 위젯·round_rect·draw_pill). ui/__init__은 아무것도 import하지 않음
+    ├── character/  mascot(캐릭터 창, 앱의 중심: 창·애니메이션·이벤트 큐·확인 카드 흐름·메뉴),
+    │               art(프레임 찾기·캐시), speech_bubble(말풍선), timer_badge(타이머 배지), chatbox, confirm_card,
+    │               picker(비서 선택), placeholder(그림 없는 캐릭터)
+    ├── windows/    메뉴에서 여는 파스텔 창: schedule, todo, price(최저가), price_settings, voice_settings,
+    │               conversation_log(대화 기록), cards(카드 목록 창 공용: 두 번 눌러 삭제, 휠 스크롤)
+    └── classic/    desktop(파일 정리 도구), assistant(옛 파일/구매 비서 창)
+tests/           test_<영역>.py (classic, companion, schedule, pricewatch, todo_focus_voice, announcements, services, entry)
 assets/characters/<id>/        상반신 프레임 405×344 + 원본 시트 2장 (reference_sheet, reference_expressions)
 assets/characters/<id>/full/   전신 프레임 405×480
-tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터별 좌표는 CHARACTERS 설정)
+tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터별 좌표는 CHARACTERS 설정, 의존성은 tools/requirements-frames.txt)
 ```
 
-사용자 데이터(`~/.nuri-assistant/`): `companion.json`(설정·네이버 API 키, 못 읽으면 `.bak`로 보존), `error.log`(예외 기록), `companion.sqlite3`(대화·일정·할 일·가격 감시), `history.sqlite3`(파일 이름 변경 이력), `characters/<id>/`(개인 캐릭터 이미지, 저장소보다 우선).
+사용자 데이터(`~/.nuri-assistant/`): `companion.json`(설정·네이버 API 키, 못 읽으면 `.bak`로 보존), `error.log`(예외 기록), `companion.sqlite3`(대화·일정·할 일·가격 감시), `history.sqlite3`(파일 이름 변경 이력), `profiles.json`(파일 정리 도구의 작업 프로필), `characters/<id>/`(개인 캐릭터 이미지, 저장소보다 우선).
 
 ## 설계 원칙 (꼭 지킬 것)
 
@@ -62,20 +83,26 @@ tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터�
 
 ## 코드 관례
 
-- SQLite는 매 호출마다 연결을 열고 반드시 닫습니다(`_connect()` 컨텍스트 매니저). 안 닫으면 Windows에서 파일이 잠깁니다.
-- 파일 이동은 `core.operations.move_no_clobber`만 씁니다. `Path.rename`은 macOS/Linux에서 기존 파일을 덮어씁니다.
-- 새 도구 묶음은 `specs`, `execute`, `take_pending`, `owns`, `confirm`을 갖춘 클래스로 만들어 `MascotApp`의 `ToolBox([...])`에 넣고, 페르소나 시스템 프롬프트(`personas.py`의 `abilities`)에 쓰임새를 한 줄 추가합니다. 확인 카드는 액션의 `kind`(add/done/cancel/delete), `heading`, `when`, `title`만 읽습니다.
+- SQLite는 매 호출마다 연결을 열고 반드시 닫습니다. 저장소의 `_connect()`는 `db.connect(path, rows=...)`를 돌려주기만 합니다. 안 닫으면 Windows에서 파일이 잠깁니다.
+- 사용자 데이터·그림 경로는 `paths.py`에만 적습니다(`Path(__file__).parents[N]`을 다른 곳에 쓰지 않음. 파일을 옮기면 조용히 깨짐). `MascotApp(app_dir)`는 다른 폴더를 받을 수 있으므로 거기서는 파일 이름(`.name`)만 가져다 씁니다.
+- 파일 이동은 `classic.core.operations.move_no_clobber`만 씁니다. `Path.rename`은 macOS/Linux에서 기존 파일을 덮어씁니다.
+- 새 도구 묶음은 `specs`, `execute`, `take_pending`, `owns`, `confirm`을 갖춘 클래스로 만들어(확인 카드가 필요하면 `ConfirmingTools`를 상속하고 `action_type`만 지정) `services.py`의 `ToolBox([...])`에 넣고, 페르소나 시스템 프롬프트(`personas.py`의 `abilities`)에 쓰임새를 한 줄 추가합니다. 확인 카드는 액션의 `kind`(add/done/cancel/delete), `heading`, `when`, `title`만 읽습니다(`companion.toolbox.ConfirmableAction`).
+- 앱이 스스로 하는 대사(원칙 5)는 `announcements.py`에서 조립하고 `tests/test_announcements.py`에 사례를 넣습니다. `MascotApp`은 저장소 갱신과 `talk()`/`say()`만 합니다.
+- 캐릭터 창의 시간 값(깜박임, 입 움직임, 표정 복귀, 폴링 주기 등)은 `ui/character/mascot.py` 위쪽 `*_MS` 상수에 모여 있습니다.
 - 테스트용 가짜 클라이언트의 `chat_stream`은 `(model, messages, options=None, tools=None)`을 받아야 합니다.
-- 오류가 나도 창은 보여야 합니다. 시작 실패는 `run_nuri.py`가 `crashlog`로 `error.log`에 남기고 안내창을 띄웁니다. Tk 콜백 예외는 `MascotApp.report_callback_exception`이 기록하고, 숨겨진 창(비서 선택 중)이면 다시 보이게 합니다. `after()`로 반복하는 루프는 본문을 별도 함수로 빼고 `finally`에서 다시 예약합니다(예외 한 번에 루프가 멈추면 앱이 굳은 것처럼 보임).
+- 오류가 나도 창은 보여야 합니다. 시작 실패는 `app.main()`이 `crashlog`로 `error.log`에 남기고 안내창을 띄웁니다. Tk 콜백 예외는 `MascotApp.report_callback_exception`이 기록하고, 숨겨진 창(비서 선택 중)이면 다시 보이게 합니다. `after()`로 반복하는 루프는 본문을 별도 함수로 빼고 `finally`에서 다시 예약합니다(예외 한 번에 루프가 멈추면 앱이 굳은 것처럼 보임).
+- import는 패키지 안에서 상대 경로(`from ..schedule import ...`)만 씁니다. `from nuri_assistant import`처럼 쓰면 테스트(`src.nuri_assistant`)에서 패키지가 두 번 로드됩니다. 순서는 표준 라이브러리 → 점이 많은 상대 import → 점이 적은 상대 import, 그 안에서는 이름순.
+- 새 창은 쓰임새에 맞는 `ui/` 하위 폴더에 둡니다: 캐릭터 캔버스에 그리는 것은 `character/`, 메뉴에서 여는 창은 `windows/`, 파일 정리 도구 쪽은 `classic/`. 공용 그리기 함수는 `ui/theme.py`, 카드 목록 창 공용 동작은 `ui/windows/cards.py`에 둡니다(`windows/`의 창끼리는 서로 import하지 않음).
+- 최상위 `nuri_assistant/__init__.py`의 이름들은 옛 파일 정리 도구의 API를 호환용으로 다시 내보내는 것입니다. 새 기능은 각 영역 패키지에서 바로 import합니다.
 - 텍스트 파일은 항상 `encoding=`을 지정합니다(한국어 Windows 기본은 cp949). 사용자가 메모장으로 고칠 수 있는 파일은 `utf-8-sig`와 cp949도 읽습니다.
-- 백그라운드 작업(모델 호출, 가격 조회, 음성 합성)은 스레드에서 돌리고 결과는 `MascotApp.events` 큐로 넘깁니다. 스레드에서 Tk 위젯을 직접 만지지 않습니다.
+- 백그라운드 작업(모델 호출, 가격 조회, 음성 합성)은 스레드에서 돌리고 결과는 `MascotApp.events` 큐에 `("종류", 값...)`으로 넘깁니다. 새 종류는 `_handle_event`의 표에 `_on_<종류>` 메서드로 추가합니다. 스레드에서 Tk 위젯을 직접 만지지 않습니다.
 - 말풍선과 음성을 함께 낼 때는 `MascotApp.talk()`, 말풍선만이면 `say()`. 오류·안내 문구는 읽지 않습니다.
 - 모델 답변의 일본어 음성 대사는 `<ja>…</ja>`로 받고 `ReplyParser.voice`에 담깁니다(말풍선과 대화 기억에는 남기지 않음).
 - 설정 항목을 추가할 때는 `CompanionSettings`에 기본값과 함께 넣습니다. 알 수 없는 키는 로드 시 무시되므로 옛 설정 파일도 열립니다.
 
 ## UI 관례
 
-- 색과 공용 위젯은 `ui/theme.py` (파스텔 라일락: 배경 `#f6f2fb`, 강조 `#a68ae0`, 글자 `#2f2640`, 오늘/달성 `#3fae94`, 위험 `#e06c8a`). 새 창은 기본 ttk 표 대신 이 톤의 캔버스 카드로 만듭니다(일정·할 일·최저가 창 참고). 삭제는 두 번 눌러야 되게 합니다.
+- 색과 공용 위젯은 `ui/theme.py` (파스텔 라일락: 배경 `#f6f2fb`, 강조 `#a68ae0`, 글자 `#2f2640`, 오늘/달성 `#3fae94`, 위험 `#e06c8a`). 새 창은 기본 ttk 표 대신 이 톤의 캔버스 카드로 만듭니다(일정·할 일·최저가 창 참고). 삭제는 두 번 눌러야 되게 합니다(`ui/windows/cards.py`의 `CardListMixin`). 색·글꼴은 `theme`에서 가져오고, 일부러 다른 색만 모듈에 따로 둡니다.
 - 캐릭터 창 캔버스 겹침 순서: 캐릭터 → 타이머 배지(`timer`) → 말풍선(`bubble`) → 확인 카드(`confirm`) → 채팅창(`chat`). 캐릭터를 다시 그린 뒤 이 순서로 `tag_raise`합니다.
 - 채팅창은 캐릭터에 마우스를 올렸을 때만 보이고, 마우스만으로는 입력 포커스를 가져오지 않습니다.
 - 프레임은 1:1로 보여 줍니다(상반신 405×344, 전신 405×480, 창 폭 `WIDTH = 415`). 실행 중 리샘플링은 화질을 떨어뜨리니 크기를 바꾸려면 `tools/build_frames.py`의 `W, H`/`FULL_W, FULL_H`와 `WIDTH`를 같이 바꿉니다.

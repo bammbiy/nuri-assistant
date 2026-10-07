@@ -1,4 +1,8 @@
-from .desktop import NuriAssistantApp, run
-from .mascot import MascotApp, run_mascot
+"""Tk windows, grouped by who owns them:
 
-__all__ = ["MascotApp", "NuriAssistantApp", "run", "run_mascot"]
+- ui.theme: shared colours, fonts and drawing helpers
+- ui.character: the character window (mascot) and what is drawn on its canvas
+- ui.windows: pastel windows opened from the character menu
+- ui.classic: the classic file-renaming tool and the file/purchase assistant
+
+This package imports nothing, so importing one window does not load the whole app."""

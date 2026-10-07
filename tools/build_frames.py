@@ -1,6 +1,6 @@
 """Rebuild a character's expression frames from two AI-generated reference sheets.
 
-    pip install pillow numpy scipy rembg onnxruntime
+    pip install -r tools/requirements-frames.txt
     python tools/build_frames.py nuri            # writes assets/characters/nuri/
     python tools/build_frames.py sera /tmp/out   # or any output folder
 

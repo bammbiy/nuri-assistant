@@ -3,9 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable
-
-from typing import Any
+from typing import Any, Callable
 
 from .llm import OllamaClient, OllamaToolsUnsupported, ToolCall
 from .memory import ConversationStore

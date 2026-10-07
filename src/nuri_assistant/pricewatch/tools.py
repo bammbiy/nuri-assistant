@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from ..companion.toolbox import ConfirmingTools, clean_args, unknown_tool
 from .checker import PriceChecker, won
 from .store import WatchStore
 
@@ -81,7 +82,7 @@ class WatchAction:
         return f"{won(self.target_price)} 이하" if self.target_price else "최저가 갱신 시"
 
 
-def _price(value: Any) -> int | None:
+def parse_price(value: Any) -> int | None:
     """Accept 300000, "300000", "30만원", "29만 9천원"."""
 
     if value in (None, ""):
@@ -98,23 +99,17 @@ def _price(value: Any) -> int | None:
     return total or None
 
 
-class PriceTools:
+class PriceTools(ConfirmingTools[WatchAction]):
     specs = TOOL_SPECS
+    action_type = WatchAction
 
     def __init__(self, store: WatchStore, checker: PriceChecker) -> None:
+        super().__init__()
         self.store = store
         self.checker = checker
-        self.pending: list[WatchAction] = []
-
-    @property
-    def names(self) -> set[str]:
-        return {spec["function"]["name"] for spec in self.specs}
-
-    def owns(self, action: object) -> bool:
-        return isinstance(action, WatchAction)
 
     def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        args = {key: value for key, value in arguments.items() if value not in (None, "")}
+        args = clean_args(arguments)
         if name == "search_prices":
             return self._search(str(args.get("query", "")))
         if name == "add_price_watch":
@@ -123,7 +118,7 @@ class PriceTools:
             return self._list()
         if name == "remove_price_watch":
             return self._remove(str(args.get("keyword", "")))
-        return {"ok": False, "error": f"알 수 없는 도구: {name}"}
+        return unknown_tool(name)
 
     def _search(self, query: str) -> dict[str, Any]:
         if not query.strip():
@@ -140,7 +135,7 @@ class PriceTools:
             return {"ok": False, "error": "상품 이름이나 링크가 필요해요."}
         if not url and not self.checker.sources():
             return {"ok": False, "error": "가격 조회 API 키가 없어요. 메뉴의 '가격 알림 설정'에서 네이버 쇼핑 키를 넣어 달라고 안내한다."}
-        action = WatchAction("add", query.strip() or url.strip(), _price(target), url.strip())
+        action = WatchAction("add", query.strip() or url.strip(), parse_price(target), url.strip())
         self.pending.append(action)
         return {"ok": True, "status": "사용자 확인 대기 중 (아직 등록되지 않음)", "title": action.title, "condition": action.when}
 
@@ -167,10 +162,6 @@ class PriceTools:
         watch = matches[0]
         self.pending.append(WatchAction("cancel", watch.label, watch.target_price, watch.url, watch.id))
         return {"ok": True, "status": "사용자 확인 대기 중 (아직 해제되지 않음)", "title": watch.label}
-
-    def take_pending(self) -> list[WatchAction]:
-        pending, self.pending = self.pending, []
-        return pending
 
     def confirm(self, action: WatchAction) -> str:
         if action.kind == "add":

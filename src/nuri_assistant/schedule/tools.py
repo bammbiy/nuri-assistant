@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Callable
 
+from ..companion.toolbox import ConfirmingTools, clean_args, unknown_tool
 from .store import Event, ScheduleStore, default_remind_at
 from .timeparse import WhenError, format_when, parse_range, parse_when
 
@@ -78,22 +79,23 @@ class PendingAction:
         return "일정 등록" if self.kind == "add" else "일정 취소"
 
 
-class ScheduleTools:
+class ScheduleTools(ConfirmingTools[PendingAction]):
     """Executes the model's schedule tool calls. Changes only become real via confirm()."""
 
     specs = TOOL_SPECS
+    action_type = PendingAction
 
     def __init__(self, store: ScheduleStore, clock: Callable[[], datetime] = datetime.now) -> None:
+        super().__init__()
         self.store = store
         self.clock = clock
-        self.pending: list[PendingAction] = []
 
     def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         handler = {"add_event": self._add, "list_events": self._list, "cancel_event": self._cancel}.get(name)
         if handler is None:
-            return {"ok": False, "error": f"알 수 없는 도구: {name}"}
+            return unknown_tool(name)
         try:
-            return handler(**{key: value for key, value in arguments.items() if value not in (None, "")})
+            return handler(**clean_args(arguments))
         except TypeError as exc:
             return {"ok": False, "error": f"잘못된 인자: {exc}"}
 
@@ -139,13 +141,6 @@ class ScheduleTools:
         action = PendingAction("cancel", event.title, event.start, event.all_day, event.remind_at, event.id)
         self.pending.append(action)
         return {"ok": True, "status": "사용자 확인 대기 중 (아직 취소되지 않음)", "title": event.title, "when": event.when}
-
-    def owns(self, action: object) -> bool:
-        return isinstance(action, PendingAction)
-
-    def take_pending(self) -> list[PendingAction]:
-        pending, self.pending = self.pending, []
-        return pending
 
     def confirm(self, action: PendingAction) -> str:
         if action.kind == "add":

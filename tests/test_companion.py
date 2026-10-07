@@ -9,7 +9,6 @@ from unittest.mock import patch
 from urllib.error import URLError
 
 from src.nuri_assistant.crashlog import log_exception
-from src.nuri_assistant import HistoryStore, RenameError, RenameInput, apply_batch_rename, preview_batch, undo_last_batch
 from src.nuri_assistant.companion import (
     EXPRESSIONS,
     PERSONAS,
@@ -45,44 +44,6 @@ class FakeStreamResponse:
 def _chunks(*parts: str) -> list[dict]:
     events = [{"message": {"role": "assistant", "content": part}, "done": False} for part in parts]
     return events + [{"message": {"role": "assistant", "content": ""}, "done": True}]
-
-
-class NoClobberTest(unittest.TestCase):
-    def test_batch_rename_refuses_target_created_after_preview(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            first, second = root / "first.pdf", root / "second.pdf"
-            first.write_text("first", encoding="utf-8")
-            second.write_text("second", encoding="utf-8")
-            history = HistoryStore(root / "history.sqlite3")
-            previews = preview_batch(
-                [RenameInput(first, "20260628", "ja00", "001"), RenameInput(second, "20260628", "ja00", "002")]
-            )
-            # Another program creates the second target between preview and execution.
-            (root / "20260628_ja00_002.pdf").write_text("someone else's file", encoding="utf-8")
-
-            with self.assertRaises(RenameError):
-                apply_batch_rename(previews, history)
-
-            self.assertEqual((root / "20260628_ja00_002.pdf").read_text(encoding="utf-8"), "someone else's file")
-            self.assertEqual(first.read_text(encoding="utf-8"), "first")
-            self.assertEqual(second.read_text(encoding="utf-8"), "second")
-            self.assertFalse((root / "20260628_ja00_001.pdf").exists())
-
-    def test_undo_refuses_to_overwrite_recreated_source(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            source = root / "raw.pdf"
-            source.write_text("original", encoding="utf-8")
-            history = HistoryStore(root / "history.sqlite3")
-            apply_batch_rename(preview_batch([RenameInput(source, "20260628", "ja00", "001")]), history)
-            source.write_text("new file with the old name", encoding="utf-8")
-
-            with self.assertRaises(RenameError):
-                undo_last_batch(history)
-
-            self.assertEqual(source.read_text(encoding="utf-8"), "new file with the old name")
-            self.assertTrue((root / "20260628_ja00_001.pdf").exists())
 
 
 class PersonaTest(unittest.TestCase):

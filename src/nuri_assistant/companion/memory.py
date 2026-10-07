@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import sqlite3
-from contextlib import contextmanager
+from contextlib import AbstractContextManager
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
+
+from ..db import connect
 
 
 class ConversationStore:
@@ -29,15 +30,8 @@ class ConversationStore:
                 "CREATE INDEX IF NOT EXISTS idx_companion_persona ON companion_messages (persona_id, id)"
             )
 
-    @contextmanager
-    def _connect(self) -> Iterator[sqlite3.Connection]:
-        # sqlite3's own context manager commits but never closes, which keeps the file locked on Windows.
-        conn = sqlite3.connect(self.db_path)
-        try:
-            with conn:
-                yield conn
-        finally:
-            conn.close()
+    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return connect(self.db_path)
 
     def add(self, persona_id: str, role: str, content: str) -> None:
         if role not in {"user", "assistant"}:

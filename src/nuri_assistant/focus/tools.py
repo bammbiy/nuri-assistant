@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Callable
 
+from ..companion.toolbox import unknown_tool
 from .timer import FocusTimer
 
 
@@ -78,4 +79,4 @@ class FocusTools:
                 return {"ok": True, "status": "실행 중인 타이머 없음"}
             return {"ok": True, "phase": "집중" if state.phase == "focus" else "휴식", "remaining": state.clock,
                     "cycle": f"{min(state.cycle, state.cycles)}/{state.cycles}"}
-        return {"ok": False, "error": f"알 수 없는 도구: {name}"}
+        return unknown_tool(name)

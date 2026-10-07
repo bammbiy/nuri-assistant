@@ -2,6 +2,29 @@
 
 개발 기록입니다. 최신이 위에 옵니다. 작업 원칙·구조·관례는 [CLAUDE.md](CLAUDE.md)를 보세요.
 
+## 2026-10-07 — 구조 개편, 쓰레기 코드 정리, 리팩토링 (동작 변화 없음)
+
+사용자 요청: 10년차 개발자가 실무에서 짠 것 같은 파일 구조·코드 구성, 더미·쓰레기 코드 정리, 리팩토링. 하네스로 3역할(구조 / 쓰레기 코드 / 리팩토링)이 동시에 읽기 전용 분석 → 같은 작업 트리에 **쓰레기 정리 → 리팩토링 → 구조** 순서로 한 단계씩 적용(단계마다 테스트·pyflakes·앱 시작 스모크) → 독립 검토 에이전트가 전체 변경을 다시 확인했습니다. 기능·한국어 문구·사용자 데이터 경로·DB 스키마·실행 방법(`src/run_nuri.py`, `--classic`, `start_nuri.bat`)은 그대로입니다.
+
+**쓰레기 코드 정리**
+- 호출하는 곳이 없는 코드 삭제: `VoiceSpeaker.cancel`, `PriceTools.names`, 테스트에서만 쓰던 단일 파일 이름 바꾸기/되돌리기(`apply_rename`, `undo_last`, `HistoryStore.recent/mark_undone`, 테스트는 일괄 API로 바꿔 유지).
+- 중복 제거: 둥근 사각형 그리기 3벌·알약 그리기·색/글꼴 상수(값이 같은 것만 `ui/theme.py`로, 값이 조금 다른 것은 화면이 안 바뀌게 지역 상수로 남김), SQLite 연결 5벌(`db.connect`), 일정·할 일·가격 창의 두 번 눌러 삭제·스크롤(`ui/windows/cards.py`의 `CardListMixin`), 중복 정규식.
+- 앱 경로가 옛 파일 정리 화면(`desktop.py`)에 있던 것을 `paths.py`로. `_tick_timer`·`_price_loop`·깜빡임·입 움직임 루프도 `finally`에서 다시 예약하게.
+- README의 영어 "Assistant Mode"/OpenAI 절, 옛 NF 시절 소개·로드맵·포트폴리오 절, 틀린 메뉴 목록 정리.
+- 메뉴에서 열리는 옛 기능(파일 정리 도구, 파일/구매 비서)은 쓰레기가 아니라 살아 있는 기능이라 그대로 두고 `classic/`으로 분리만 했습니다.
+
+**리팩토링**
+- `mascot.py`(980줄 → 814줄)에서 역할별로 분리: `services.py`(저장소·도구·타이머 조립, Tk 없음), `announcements.py`(알림·브리핑·잔소리 문장, Tk 없음, 테스트 추가), `ui/character/art.py`(프레임 찾기·이미지 캐시), `speech_bubble.py`, `timer_badge.py`, `ui/windows/log.py`(대화 기록 창). 이벤트 처리는 종류별 함수로 나눈 표로.
+- 확인 카드 흐름 공통화: `ConfirmingTools` 기반 클래스(일정·할 일·가격 도구가 상속), `ConfirmableAction` 프로토콜, "응/아니" 해석 `parse_confirmation`.
+- 타이밍 숫자(폴링 간격·깜빡임 등)에 이름 붙인 상수.
+- 분리 전후로 캔버스의 모든 그림 요소 좌표·옵션을 덤프해 비교했고 똑같았습니다.
+
+**구조**
+- `src/nuri_assistant/`: 앱 공통(`app.py` 진입점, `__main__.py`, `paths.py`, `db.py`, `crashlog.py`, `services.py`, `announcements.py`) / 비서 기능 패키지(companion, schedule, todo, focus, pricewatch, voice) / 옛 파일 정리 도구는 `classic/`(core, metadata, storage, shopping, commands) / 화면은 `ui/character`(캐릭터 창과 부품), `ui/windows`(관리 창), `ui/classic`(옛 화면), `ui/theme.py`.
+- `pyproject.toml`(Python 3.10+, 런타임 의존성 없음, 선택 `[images]`=Pillow, `[dev]`=pyflakes, `nuri-assistant` 실행 명령), `python -m nuri_assistant`, `.editorconfig`, `tools/README.md`·`tools/requirements-frames.txt`.
+- 테스트: `test_nuri_assistant.py` → `test_classic.py`, 새 `test_announcements.py`·`test_services.py`·`test_entry.py`. 78개 → 92개.
+- 검토 결과: 메뉴 창 11개를 전부 눌러 여는 스모크, `--classic`, `python -m`, Python 3.10 실행까지 오류 0.
+
 ## 2026-10-07 — 아카네 그림 추가
 
 - 빨간 머리 캐릭터는 이미 성격·대사·목소리가 있던 아카네(츤데레)로 정했습니다. 사용자가 제미나이로 뽑았는데 그림체를 기존 캐릭터와 맞추기 어려워서, 기존 시트 첨부 + 그림체를 문장으로 고정한 프롬프트를 만들어 줬습니다.

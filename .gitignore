@@ -10,3 +10,6 @@ htmlcov/
 dist/
 build/
 *.spec
+
+# pip install -e .
+*.egg-info/

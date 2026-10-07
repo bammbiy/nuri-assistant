@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable
 
+from ..companion.toolbox import ConfirmingTools, clean_args, unknown_tool
 from ..schedule.timeparse import WhenError, parse_when
 from .store import Todo, TodoStore
 
@@ -76,19 +77,17 @@ class TodoAction:
         return Todo(0, self.title, self.due, self.all_day, False).due_text
 
 
-class TodoTools:
+class TodoTools(ConfirmingTools[TodoAction]):
     specs = TOOL_SPECS
+    action_type = TodoAction
 
     def __init__(self, store: TodoStore, clock: Callable[[], datetime] = datetime.now) -> None:
+        super().__init__()
         self.store = store
         self.clock = clock
-        self.pending: list[TodoAction] = []
-
-    def owns(self, action: object) -> bool:
-        return isinstance(action, TodoAction)
 
     def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        args = {key: value for key, value in arguments.items() if value not in (None, "")}
+        args = clean_args(arguments)
         if name == "add_todo":
             return self._add(str(args.get("title", "")), str(args.get("due", "")))
         if name == "list_todos":
@@ -98,7 +97,7 @@ class TodoTools:
                     "todos": [f"{t.title} ({t.due_text}{', ' + t.d_day(today) if t.due else ''})" for t in todos]}
         if name in ("complete_todo", "delete_todo"):
             return self._pick("done" if name == "complete_todo" else "delete", str(args.get("keyword", "")))
-        return {"ok": False, "error": f"알 수 없는 도구: {name}"}
+        return unknown_tool(name)
 
     def _add(self, title: str, due: str) -> dict[str, Any]:
         if not title.strip():
@@ -122,10 +121,6 @@ class TodoTools:
         todo = matches[0]
         self.pending.append(TodoAction(kind, todo.title, todo.due, todo.all_day, todo.id))
         return {"ok": True, "status": "사용자 확인 대기 중", "title": todo.title}
-
-    def take_pending(self) -> list[TodoAction]:
-        pending, self.pending = self.pending, []
-        return pending
 
     def confirm(self, action: TodoAction) -> str:
         if action.kind == "add":

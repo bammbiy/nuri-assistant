@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import sqlite3
-from contextlib import contextmanager
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from pathlib import Path
-from typing import Iterator
 
+from ..db import connect
 from .timeparse import format_when
 
 
@@ -60,15 +60,8 @@ class ScheduleStore:
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_schedule_start ON schedule_events (start)")
 
-    @contextmanager
-    def _connect(self) -> Iterator[sqlite3.Connection]:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        try:
-            with conn:
-                yield conn
-        finally:
-            conn.close()
+    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return connect(self.db_path, rows=True)
 
     @staticmethod
     def _event(row: sqlite3.Row) -> Event:

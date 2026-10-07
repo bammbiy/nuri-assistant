@@ -1,0 +1,37 @@
+# Packaging metadata. The app itself is still started with start_nuri.bat or `python src/run_nuri.py`;
+# this file adds `pip install -e .` and the `nuri-assistant` launcher on top.
+# Only editable installs are supported: the character art in assets/ sits outside the package,
+# so a regular install would quietly fall back to the drawn placeholder characters.
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nuri-assistant"
+version = "0.1.0"
+description = "바탕화면 캐릭터 비서: 로컬 AI(Ollama)와 한국어로 대화하고 일정·할 일·집중 타이머·최저가 알림을 챙깁니다."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []  # stdlib only at runtime; tkinter ships with the python.org Windows installer
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Operating System :: Microsoft :: Windows",
+    "Environment :: Win32 (MS Windows)",
+    "Natural Language :: Korean",
+    "Private :: Do Not Upload",
+]
+
+[project.optional-dependencies]
+images = ["pillow"]  # smoother thumbnail scaling; the app works without it
+dev = ["pyflakes"]
+# Frame-building dependencies live in tools/requirements-frames.txt (not part of the app).
+
+[project.gui-scripts]
+# gui-scripts: a pythonw launcher on Windows, so no console window stays open behind the character.
+nuri-assistant = "nuri_assistant.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["nuri_assistant*"]

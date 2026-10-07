@@ -1,0 +1,7 @@
+# Only for tools/build_frames.py (rebuilding character frames). The app itself needs none of these.
+#   pip install -r tools/requirements-frames.txt
+pillow
+numpy
+scipy
+rembg
+onnxruntime

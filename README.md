@@ -15,7 +15,7 @@ Windows에서는 `start_nuri.bat`을 더블클릭하거나 `python src/run_nuri.
 - 대화는 캐릭터별로 `~/.nuri-assistant/companion.sqlite3`에 저장되고, 최근 대화를 기억한 채 이어서 말합니다.
 - 메뉴의 `전신으로 보기`를 켜면 상반신 대신 전신으로 나옵니다 (누리, 세라, 유키, 아카네). 전신에서도 표정, 입 움직임, 깜빡임이 그대로 나오고, 창은 발 위치를 유지한 채 위로 커집니다.
 - 캐릭터를 드래그하면 위치를 옮길 수 있고, 클릭하면 반응하면서 채팅창에 바로 입력할 수 있게 됩니다. 위치는 저장됩니다.
-- 오른쪽 클릭이나 채팅창 왼쪽의 `⋯` 버튼으로 메뉴를 엽니다: 캐릭터 변경, 내 이름 설정, AI 모델 설정, 대화 기록, 기억 지우기, 파일 정리 도구, 종료
+- 오른쪽 클릭이나 채팅창 왼쪽의 `⋯` 버튼으로 메뉴를 엽니다: 비서 선택, 전신으로 보기, 내 이름 설정, AI 모델 설정, 일정 보기, 오늘 일정 브리핑, 할 일, 집중 타이머, 최저가 알림, 가격 알림 설정, 음성 설정, 대화 기록 보기, 기억 지우기, 파일 정리 도구, 파일/구매 비서, 종료
 - 누리, 세라, 유키, 아카네는 일러스트 이미지로 나오고, 다른 캐릭터는 그림을 넣기 전까지 도형으로 그린 임시 캐릭터가 나옵니다. 오른쪽 클릭이나 `⋯` 메뉴의 `대화 기록 보기`에서 지난 대화를 볼 수 있습니다. 그림 넣는 법과 AI 생성 프롬프트는 [assets/characters/README.md](assets/characters/README.md)에 있습니다.
 - **일정 관리**: "내일 오후 3시에 치과 잡아줘", "이번 주 일정 알려줘", "내일 회의 취소해" 처럼 말로 관리합니다.
   - 등록과 취소는 캐릭터 아래에 뜨는 확인 카드에서 `등록`/`취소`를 누르거나 "응", "아니"라고 입력해야 실제로 반영됩니다.
@@ -64,33 +64,13 @@ python src/run_nuri.py --classic # 캐릭터 없이 파일 정리 도구만
 
 다른 모델을 쓰려면 메뉴의 `AI 모델 설정`에서 이름을 바꿉니다. 예를 들어 한국어에 강한 `exaone3.5:7.8b`도 8GB VRAM에 들어갑니다. 설정은 `~/.nuri-assistant/companion.json`에 저장됩니다.
 
-## Assistant Mode
+## 파일 정리 도구 (이전 기능)
 
-Nuri Assistant combines file organization and purchase decisions in one review-first desktop workflow.
+캐릭터 비서 이전부터 있던 문서 파일명 일괄 정리 도구입니다. 메뉴의 `파일 정리 도구`나 `python src/run_nuri.py --classic`으로 엽니다.
 
-- File assistant: choose a folder and type a request such as `20260715 ja00 1부터 하위 폴더까지 정리해줘`. The app extracts the date, media code, page number, naming order, and recursive option, then shows a rename preview before any files change.
-- Purchase assistant: add the product you are considering plus alternatives. It ranks products from the price, rating, review count, warranty, and your fit score. The result only uses the facts entered in the app; it does not claim live prices, reviews, or market research.
+파일을 추가하면 날짜, 매체코드, 페이지 번호를 기반으로 변경 예정 파일명을 미리 보여주고, 충돌 여부를 확인한 뒤 일괄 rename을 실행합니다. 변경 이력은 SQLite(`~/.nuri-assistant/history.sqlite3`)에 저장되며 마지막 배치는 되돌릴 수 있습니다.
 
-The built-in score works offline from the facts you enter. The AI Research panel adds live web research when an OpenAI API key is supplied, while keeping the same flow: collect sources, show the evidence, recommend, and leave the final purchase decision to you.
-
-### AI shopping research
-
-The Purchase Assistant includes an `AI Research` panel. Enter a product name or product link, optionally add your own candidates, then enter an OpenAI API key for the current session and press `AI Research`.
-
-- The key is never written to a project file or profile.
-- The request sends `store: false` and asks the model to research current web evidence before recommending a purchase.
-- The response should be treated as research support: always recheck the current price, seller, warranty, and delivery conditions before buying.
-
-You can also set the key once for the current Windows terminal before starting the app:
-
-```powershell
-$env:OPENAI_API_KEY = "your_api_key"
-python src/run_nuri.py
-```
-
-반복되는 문서 파일명 정리 작업을 빠르고 안전하게 처리하기 위한 데스크톱 파일 관리 도구입니다.
-
-파일을 추가하면 날짜, 매체코드, 페이지 번호를 기반으로 변경 예정 파일명을 미리 보여주고, 충돌 여부를 확인한 뒤 일괄 rename을 실행합니다. 변경 이력은 SQLite에 저장되며 마지막 변경은 되돌릴 수 있습니다.
+메뉴의 `파일/구매 비서` 창에는 두 탭이 있습니다. 파일 비서는 "20260715 ja00 1부터 하위 폴더까지 정리해줘" 같은 문장에서 정리 조건을 뽑아 미리보기까지 보여 줍니다(실행은 확인 후). 구매 비서는 입력한 후보 상품을 가격·평점·리뷰 수·보증 기간으로 비교하고, OpenAI API 키(`OPENAI_API_KEY` 또는 창에 직접 입력, 파일에 저장하지 않음)가 있으면 웹 조사를 덧붙입니다. 이 부분은 영어 화면이며 로컬 AI가 아닌 외부 API를 씁니다.
 
 ## 핵심 기능
 
@@ -142,15 +122,6 @@ ja00-20260628-001.pdf
 - `{MEDIA}`: 영문 2자 + 숫자 2자, 예: `ja00`
 - `{PAGE}`: 3자리 페이지 번호, 예: `001`
 
-## 실행 방법
-
-Python 3.11 이상을 권장합니다.
-
-```bash
-cd nuri-assistant
-python src/run_nuri.py
-```
-
 ## 실무 사용 흐름
 
 1. `파일 추가` 또는 `폴더 불러오기`로 작업 대상을 추가합니다.
@@ -177,113 +148,15 @@ python src/run_nuri.py
 
 프로필 파일은 사용자 홈의 `.nuri-assistant/profiles.json`에 저장됩니다.
 
-## 테스트
+## 개발
+
+Python 3.10 이상(3.11 권장), 앱 실행에 외부 패키지는 필요 없습니다. 저장소 루트에서:
 
 ```bash
-cd nuri-assistant
-python -m unittest discover -s tests
+python src/run_nuri.py                    # 캐릭터 비서
+python src/run_nuri.py --classic          # 파일 정리 도구만
+python -m unittest discover -s tests      # 단위 테스트 (tkinter 없이 실행)
+pip install -e .                          # 선택: 설치하면 어디서나 nuri-assistant / python -m nuri_assistant 로 실행
 ```
 
-## 프로젝트 구조
-
-```text
-nuri-assistant/
-├── README.md
-├── src/
-│   ├── run_nuri.py
-│   └── nuri_assistant/
-│       ├── __init__.py
-│       ├── companion/
-│       │   ├── brain.py
-│       │   ├── llm.py
-│       │   ├── memory.py
-│       │   ├── personas.py
-│       │   ├── reply.py
-│       │   └── settings.py
-│       ├── core/
-│       │   ├── export.py
-│       │   ├── models.py
-│       │   ├── naming.py
-│       │   ├── operations.py
-│       │   ├── planner.py
-│       │   └── scanner.py
-│       ├── pricewatch/
-│       │   ├── checker.py
-│       │   ├── sources.py
-│       │   ├── store.py
-│       │   └── tools.py
-│       ├── schedule/
-│       │   ├── store.py
-│       │   ├── timeparse.py
-│       │   └── tools.py
-│       ├── metadata/
-│       │   ├── patterns.py
-│       │   └── inference.py
-│       ├── storage/
-│       │   ├── history.py
-│       │   └── profiles.py
-│       └── ui/
-│           ├── assistant.py
-│           ├── desktop.py
-│           ├── mascot.py
-│           └── placeholder.py
-├── assets/
-│   └── characters/
-│       └── README.md
-└── tests/
-    ├── test_companion.py
-    └── test_nuri_assistant.py
-```
-
-## 설계 방향
-
-기존 MVP는 하나의 엔진 파일에 검증, 추론, 미리보기, 실행, 히스토리 저장이 모두 섞여 있었습니다. 현재 구조는 기능 확장을 염두에 두고 역할별로 나눴습니다.
-
-- `core`: 파일명 생성, 검증, 미리보기, rename/undo 실행
-- `core.export`: 검수용 CSV 저장
-- `core.scanner`: 폴더 내 문서/이미지 파일 스캔
-- `metadata`: 파일명에서 날짜, 매체코드, 페이지를 추론하는 규칙
-- `storage`: SQLite 히스토리 저장소, 배치 단위 이력, 작업 프로필
-- `companion`: 캐릭터 설정(페르소나), 로컬 Ollama 연결, 표정 태그 해석, 대화 기억, 설정 저장
-- `schedule`: 한국어 날짜/시간 해석, 일정 저장소(SQLite), AI가 부르는 일정 도구(등록·조회·취소, 확인 대기)
-- `pricewatch`: 가격 출처(네이버 쇼핑 검색 API·상품 페이지), 감시 저장소, 알림 규칙, AI가 부르는 가격 도구
-- `ui`: Tkinter 데스크톱 화면 (`mascot.py`: 캐릭터 창, `desktop.py`: 파일 정리 도구)
-
-이 구조를 기준으로 다음 단계에서는 폴더 감시, OCR 필요 여부 검사, 업로드 상태 모니터링 같은 기능을 독립 모듈로 붙일 수 있습니다.
-
-## 개발 로드맵
-
-### 1단계: File Rename MVP
-
-- 파일 선택
-- 규칙 기반 파일명 생성
-- 미리보기
-- 일괄 rename
-- 히스토리 저장
-- 마지막 변경 취소
-
-### 2단계: Folder Watcher
-
-- 다운로드 폴더 감시
-- 새 PDF 자동 감지
-- rename 후보 자동 생성
-- 처리 완료 알림
-
-### 3단계: OCR Inspector
-
-- PDF 텍스트 존재 여부 검사
-- OCR 필요 파일 분류
-- OCR 처리 도구 연동 준비
-
-### 4단계: Upload Monitor
-
-- 업로드 성공, 실패, 재시도 이력 관리
-- 작업 현황 대시보드 제공
-
-### 5단계: NewsFlow
-
-Nuri Assistant, Folder Watcher, OCR Inspector, Upload Monitor를 하나의 문서 처리 파이프라인으로 통합합니다.
-
-## 포트폴리오 포인트
-
-이 프로젝트는 단순 파일명 변경 도구에서 시작하지만, 장기적으로는 콘텐츠 제작 업무에서 발생하는 문서 처리 흐름을 자동화하는 파이프라인으로 확장할 수 있습니다. 핵심은 `미리보기 -> 실행 -> 이력 기록 -> 되돌리기` 흐름을 안전하게 제공하는 것입니다.
+폴더 구조, 설계 원칙, 코드 관례는 [CLAUDE.md](CLAUDE.md)에, 지금까지의 작업 기록은 [HISTORY.md](HISTORY.md)에 있습니다.
