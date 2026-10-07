@@ -27,6 +27,7 @@ from ...companion import (
 from ...crashlog import log_exception
 from ...paths import APP_DIR, ASSETS_DIR, SETTINGS_PATH, USER_CHARACTERS
 from ...pricewatch import CheckResult, WatchAction
+from ...screen import Rect, all_monitors, default_position, is_reachable, work_area
 from ...services import Services
 from ...voice import VoiceSpeaker, VoicevoxClient
 from ..classic.assistant import AssistantWindow
@@ -83,6 +84,7 @@ HELD_NOTICE_DELAY_MS = 3500
 HELD_NOTICE_GAP_MS = 4000
 # Pointer travel (px) before a press on the character counts as a drag, not a poke.
 DRAG_THRESHOLD_PX = 4
+KEEP_ON_TOP_MS = 3000  # re-assert topmost / on-screen
 # Windows keys this exact color out of the window. A near-black key keeps
 # anti-aliased PNG edges looking like line art instead of a colored halo.
 TRANSPARENT_KEY = "#010203"
@@ -149,6 +151,7 @@ class MascotApp(tk.Tk):
         self.after(FIRST_PRICE_CHECK_MS, self._price_loop)
         self.after(FIRST_BLINK_MS, self._blink)
         self.after(POINTER_POLL_MS, self._watch_pointer)
+        self.after(KEEP_ON_TOP_MS, self._keep_on_screen)
         threading.Thread(target=self._check_model, daemon=True).start()
 
     def report_callback_exception(self, exc_type, value, tb) -> None:
@@ -262,15 +265,40 @@ class MascotApp(tk.Tk):
         self.menu.add_command(label="종료", command=self.quit_app)
 
     def _place_window(self) -> None:
+        """Saved spot if it is still on a monitor, else bottom-right above the taskbar."""
+
         self.update_idletasks()
         height = self.winfo_reqheight()
         x, y = self.settings.x, self.settings.y
-        if x is None or y is None:
-            x = self.winfo_screenwidth() - WIDTH - 40
-            y = self.winfo_screenheight() - height - 60
-        x = min(max(int(x), 0), max(self.winfo_screenwidth() - WIDTH, 0))
-        y = min(max(int(y), 0), max(self.winfo_screenheight() - height, 0))
-        self.geometry(f"+{x}+{y}")
+        if x is None or y is None or not is_reachable(int(x), int(y), WIDTH, height, self._monitors()):
+            x, y = default_position(self._work_area(), WIDTH, height)
+        self.geometry(f"+{int(x)}+{int(y)}")
+
+    def _work_area(self) -> Rect:
+        return work_area(self.winfo_screenwidth(), self.winfo_screenheight())
+
+    def _monitors(self) -> Rect:
+        return all_monitors(self.winfo_screenwidth(), self.winfo_screenheight())
+
+    def _keep_on_screen(self) -> None:
+        try:
+            self._stay_visible()
+        finally:
+            self.after(KEEP_ON_TOP_MS, self._keep_on_screen)
+
+    def _stay_visible(self) -> None:
+        """Windows drops "topmost" after full-screen apps or other topmost windows, and a
+        monitor change can strand the window off-screen: re-assert both every few seconds."""
+
+        if self.state() == "withdrawn" or self._drag_start is not None:
+            return
+        if not is_reachable(self.winfo_x(), self.winfo_y(), WIDTH, self.winfo_height(), self._monitors()):
+            x, y = default_position(self._work_area(), WIDTH, self.winfo_height())
+            self.geometry(f"+{x}+{y}")
+            self._update_settings(x=x, y=y)
+        # Not while our own windows are open: re-raising would cover them.
+        if not any(isinstance(w, tk.Toplevel) and w.winfo_viewable() for w in self.winfo_children()):
+            self.attributes("-topmost", True)
 
     def _on_press(self, event: tk.Event) -> None:
         self._drag_start = (event.x_root, event.y_root, self.winfo_x(), self.winfo_y())
@@ -343,7 +371,7 @@ class MascotApp(tk.Tk):
         if self.card.visible:
             self._show_next_card()
         self.update_idletasks()
-        y = max(self.winfo_y() - dy, 0)
+        y = max(self.winfo_y() - dy, self._monitors().top)
         self.geometry(f"+{self.winfo_x()}+{y}")
         self._update_settings(display_mode=mode, y=y)
         self._render_character()

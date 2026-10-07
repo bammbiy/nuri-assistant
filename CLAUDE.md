@@ -4,7 +4,9 @@
 
 ## 프로젝트 요약
 
-바탕화면에 애니메이션풍 캐릭터 비서를 항상 띄워 두고, 내 PC의 로컬 AI(Ollama)와 한국어로 대화하는 Windows용 Tkinter 앱입니다. 캐릭터가 일정·할 일·집중 타이머·최저가 알림을 관리하고, 일본어 애니 보이스(VOICEVOX)로 말할 수 있습니다. 원래는 문서 파일 이름 일괄 정리 도구였고, 그 기능도 메뉴와 `--classic` 실행으로 남아 있습니다.
+바탕화면에 애니메이션풍 캐릭터 비서를 항상 띄워 두고, 내 PC의 로컬 AI(Ollama)와 한국어로 대화하는 Windows용 Tkinter 앱입니다.
+
+**핵심 콘셉트(처음부터의 기획):** 사용자가 무슨 작업을 하든 캐릭터가 **화면 오른쪽 아래(작업 표시줄 바로 위)에 항상 위로 떠 있고**, 마우스를 올리면 바로 아래에 채팅창이 나타나 메신저처럼 대화합니다. 말풍선으로 먼저 알려 주고(일정·잔소리·가격), 확인 카드로 승인받아 앱 기능을 대신 실행합니다. 이 "항상 떠 있는 채팅 비서" 경험을 깨는 변경은 하지 않습니다. 캐릭터가 일정·할 일·집중 타이머·최저가 알림을 관리하고, 일본어 애니 보이스(VOICEVOX)로 말할 수 있습니다. 원래는 문서 파일 이름 일괄 정리 도구였고, 그 기능도 메뉴와 `--classic` 실행으로 남아 있습니다.
 
 - 사용자: 한국어 사용자, PC는 RTX 3060 Ti(8GB VRAM) + RAM 32GB, Windows
 - UI 문구와 캐릭터 대사는 모두 한국어, 음성만 일본어
@@ -18,7 +20,7 @@ python src/run_nuri.py --classic  # 파일 정리 도구만
 python -m nuri_assistant [--classic]   # 같은 실행 (src/ 안에서, 또는 pip install -e . 뒤 어디서나. 설치하면 nuri-assistant 명령도 생김)
 pip install -e .[dev]             # 선택: 개발용 설치(pyflakes). 그림이 assets/에 있어서 편집 설치(-e)만 지원
 python -m unittest discover -s tests                         # 저장소 루트에서 (테스트는 src.nuri_assistant 로 import)
-python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 92개 통과)
+python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 97개 통과)
 python -m pyflakes src tests tools
 pip install -r tools/requirements-frames.txt                 # 프레임 생성 도구용 (앱에는 필요 없음)
 python tools/build_frames.py nuri|sera|yuki|akane [출력폴더]   # 캐릭터 프레임 재생성
@@ -56,6 +58,7 @@ src/nuri_assistant/
 ├── services.py  캐릭터 앱의 저장소·가격 확인기·타이머·ToolBox 조립 (Tk 없이 만들 수 있음)
 ├── announcements.py  AI를 거치지 않는 대사 조립: 일정 알림·잔소리·아침 브리핑·타이머·가격 알림
 ├── crashlog.py  error.log 기록과 시작 실패 안내창
+├── screen.py    창 위치 계산: 작업 영역(작업 표시줄 제외)·모든 모니터 영역, 오른쪽 아래 기본 위치
 └── ui/          theme(색·글꼴·공용 위젯·round_rect·draw_pill). ui/__init__은 아무것도 import하지 않음
     ├── character/  mascot(캐릭터 창, 앱의 중심: 창·애니메이션·이벤트 큐·확인 카드 흐름·메뉴),
     │               art(프레임 찾기·캐시), speech_bubble(말풍선), timer_badge(타이머 배지), chatbox, confirm_card,
@@ -63,7 +66,7 @@ src/nuri_assistant/
     ├── windows/    메뉴에서 여는 파스텔 창: schedule, todo, price(최저가), price_settings, voice_settings,
     │               conversation_log(대화 기록), cards(카드 목록 창 공용: 두 번 눌러 삭제, 휠 스크롤)
     └── classic/    desktop(파일 정리 도구), assistant(옛 파일/구매 비서 창)
-tests/           test_<영역>.py (classic, companion, schedule, pricewatch, todo_focus_voice, announcements, services, entry)
+tests/           test_<영역>.py (classic, companion, schedule, pricewatch, todo_focus_voice, announcements, services, entry, screen)
 assets/characters/<id>/        상반신 프레임 405×344 + 원본 시트 2장 (reference_sheet, reference_expressions)
 assets/characters/<id>/full/   전신 프레임 405×480
 tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터별 좌표는 CHARACTERS 설정, 의존성은 tools/requirements-frames.txt)
@@ -105,6 +108,8 @@ tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터�
 - 색과 공용 위젯은 `ui/theme.py` (파스텔 라일락: 배경 `#f6f2fb`, 강조 `#a68ae0`, 글자 `#2f2640`, 오늘/달성 `#3fae94`, 위험 `#e06c8a`). 새 창은 기본 ttk 표 대신 이 톤의 캔버스 카드로 만듭니다(일정·할 일·최저가 창 참고). 삭제는 두 번 눌러야 되게 합니다(`ui/windows/cards.py`의 `CardListMixin`). 색·글꼴은 `theme`에서 가져오고, 일부러 다른 색만 모듈에 따로 둡니다.
 - 글꼴은 앱에 같이 들어 있는 **나눔스퀘어라운드**(`assets/fonts/`, OFL 1.1, 블루 아카이브 모모톡 같은 둥근 고딕 느낌, Regular·Bold만). `theme.FONT` 하나만 쓰고 글꼴 이름을 직접 적지 않습니다. Windows는 `AddFontResourceEx(FR_PRIVATE)`로 이 프로세스에만 등록하고(설치 안 함), 실패하면 맑은 고딕. 새 Tk 루트를 만들면 `apply_default_fonts(root)`로 메뉴·대화상자·ttk 글꼴도 맞춥니다. 컨테이너에서 화면을 찍을 때는 `~/.local/share/fonts`에 복사하고 `fc-cache -f`.
 - 캐릭터 창 캔버스 겹침 순서: 캐릭터 → 타이머 배지(`timer`) → 말풍선(`bubble`) → 확인 카드(`confirm`) → 채팅창(`chat`). 캐릭터를 다시 그린 뒤 이 순서로 `tag_raise`합니다.
+- 창 위치(`screen.py`, Tk 없음, `tests/test_screen.py`): 처음엔 주 모니터 **작업 영역**(작업 표시줄 제외, Windows `SPI_GETWORKAREA`)의 오른쪽 아래, 가장자리에서 16px. 사용자가 끌어다 놓은 위치는 저장하고, 다음 실행 때 **모든 모니터를 합친 영역**(가상 화면) 안에 80px 이상 보이면 그대로 둡니다(두 번째 모니터 유지). 화면 밖이면(모니터를 뺐을 때 등) 다시 오른쪽 아래로.
+- 항상 위: `-topmost`에 더해 3초마다(`KEEP_ON_TOP_MS`) 다시 걸고 화면 밖으로 사라졌는지 확인합니다(Windows는 전체 화면 앱·다른 항상 위 창 뒤에 맨 위가 풀림). 우리 창(일정·설정 등)이 열려 있거나 끌고 있을 때는 건너뜁니다.
 - 채팅창은 캐릭터에 마우스를 올렸을 때만 보이고, 마우스만으로는 입력 포커스를 가져오지 않습니다.
 - 프레임은 1:1로 보여 줍니다(상반신 405×344, 전신 405×480, 창 폭 `WIDTH = 415`). 실행 중 리샘플링은 화질을 떨어뜨리니 크기를 바꾸려면 `tools/build_frames.py`의 `W, H`/`FULL_W, FULL_H`와 `WIDTH`를 같이 바꿉니다.
 - 전신 모드(`display_mode = "full"`)는 캔버스가 `FULL_EXTRA`(150px) 커지고 창이 위로 늘어납니다. 레이아웃 좌표는 `self.char_bottom`, `self.extra`를 씁니다. 전신 그림이 없는 캐릭터는 상반신으로 나옵니다.
@@ -136,6 +141,6 @@ tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터�
 
 ## 남은 일
 
-- 실제 PC(Windows)에서 종합 확인: Ollama 도구 호출, VOICEVOX 음성과 기본 목소리 id, 네이버 API(쿠팡 상품 포함 여부), 투명 배경, 고배율 화면
+- 실제 PC(Windows)에서 종합 확인: Ollama 도구 호출, VOICEVOX 음성과 기본 목소리 id, 네이버 API(쿠팡 상품 포함 여부), 투명 배경, 고배율 화면(앱이 DPI 인식을 하지 않아 125%·150%에서 Windows가 창을 늘려 그림이 흐릴 수 있음 — 확인 후 `SetProcessDpiAwareness` 검토), 오른쪽 아래 위치·항상 위 유지
 - 파일 정리 기능을 대화 도구로 연결 (미리보기·확인 카드 재사용)
 - 나머지 4명 캐릭터 그림 (시즈쿠·히나타·사쿠라·레이카). 시트 생성 프롬프트는 기존 시트를 첨부하고 그림체를 문장으로 고정해야 함(제미나이가 그림체를 잘 못 맞춤, `assets/characters/README.md`)
