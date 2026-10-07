@@ -5,7 +5,9 @@ from datetime import datetime
 from typing import Callable
 
 from ...companion import ConversationStore, Persona
-from ..theme import ACCENT, BG, CARD, CARD_LINE, FONT, SHADOW, SOFT, SUBTLE, TEXT, entry, round_rect
+from ..theme import (
+    ACCENT, BG, CARD_LINE, FONT, MOMO_BUBBLE, MOMO_NAME, MOMO_USER, SOFT, SUBTLE, TEXT, entry, round_rect,
+)
 from .cards import CardListMixin
 
 WIDTH = 460
@@ -16,7 +18,10 @@ BUBBLE_PAD = (12, 8)
 TEXT_FONT = (FONT, 10)
 META_FONT = (FONT, 8)
 WEEKDAYS = "월화수목금토일"
-AVATAR = (64, 54)
+HEADER_FACE = 52
+FACE = 40  # round face beside the first line of each character turn (MomoTalk style)
+FACE_GAP = 10
+RADIUS = 8
 
 
 def clean_content(role: str, content: str) -> str:
@@ -43,14 +48,14 @@ def time_label(moment: datetime) -> str:
 
 
 class ConversationLogWindow(CardListMixin, tk.Toplevel):
-    """Messenger-style transcript: day dividers, my lines on the right, the character's on the left."""
+    """MomoTalk-style transcript: round face and name, slate bubbles for the character, blue for me."""
 
     def __init__(
         self,
         master: tk.Misc,
         store: ConversationStore,
         persona: Persona,
-        avatar: Callable[[tuple[int, int]], tk.PhotoImage | None] | None = None,
+        face: Callable[[int, str], tk.PhotoImage | None] | None = None,
     ) -> None:
         super().__init__(master)
         self.title(f"{persona.name} 대화 기록")
@@ -63,9 +68,10 @@ class ConversationLogWindow(CardListMixin, tk.Toplevel):
 
         header = tk.Frame(self, bg=BG)
         header.pack(fill="x", padx=PAD, pady=(16, 8))
-        self._avatar = avatar(AVATAR) if avatar else None
-        if self._avatar is not None:
-            tk.Label(header, image=self._avatar, bg=BG).pack(side="left", padx=(0, 10))
+        self._header_face = face(HEADER_FACE, BG) if face else None
+        self._face = face(FACE, BG) if face else None
+        if self._header_face is not None:
+            tk.Label(header, image=self._header_face, bg=BG).pack(side="left", padx=(0, 12))
         titles = tk.Frame(header, bg=BG)
         titles.pack(side="left", fill="x", expand=True)
         tk.Label(titles, text=f"{persona.name}와의 대화", font=(FONT, 15, "bold"), bg=BG, fg=TEXT, anchor="w").pack(fill="x")
@@ -149,28 +155,31 @@ class ConversationLogWindow(CardListMixin, tk.Toplevel):
     def _bubble(self, row: dict, moment: datetime | None, y: int, width: int, show_name: bool) -> int:
         canvas = self.canvas
         mine = row["role"] == "user"
-        max_text = int((width - 2 * PAD) * BUBBLE_MAX) - 2 * BUBBLE_PAD[0]
+        indent = 0 if mine or self._face is None else FACE + FACE_GAP
+        max_text = int((width - 2 * PAD - indent) * BUBBLE_MAX) - 2 * BUBBLE_PAD[0]
         if show_name and not mine:
-            canvas.create_text(PAD + 4, y + 2, text=self.persona.name, anchor="nw", font=(FONT, 8, "bold"), fill=ACCENT)
-            y += 16
+            if self._face is not None:
+                canvas.create_image(PAD, y + 2, image=self._face, anchor="nw")
+            canvas.create_text(PAD + indent, y + 2, text=self.persona.name, anchor="nw", font=(FONT, 9, "bold"), fill=MOMO_NAME)
+            y += 20
         elif show_name:
             y += 4
-        text = canvas.create_text(0, 0, text=row["content"], anchor="nw", width=max_text, font=TEXT_FONT,
-                                  fill="#ffffff" if mine else TEXT)
+        text = canvas.create_text(0, 0, text=row["content"], anchor="nw", width=max_text, font=TEXT_FONT, fill="#ffffff")
         x1, y1, x2, y2 = canvas.bbox(text)
         w, h = x2 - x1 + 2 * BUBBLE_PAD[0], y2 - y1 + 2 * BUBBLE_PAD[1]
-        left = width - PAD - w if mine else PAD
-        if mine:
-            round_rect(canvas, left, y, left + w, y + h, 14, fill=ACCENT, outline="")
-        else:
-            round_rect(canvas, left, y + 2, left + w, y + h + 2, 14, fill=SHADOW, outline="")
-            round_rect(canvas, left, y, left + w, y + h, 14, fill=CARD, outline=CARD_LINE, width=1)
+        left = width - PAD - 6 - w if mine else PAD + indent + 6
+        fill = MOMO_USER if mine else MOMO_BUBBLE
+        round_rect(canvas, left, y, left + w, y + h, RADIUS, fill=fill, outline="")
+        if show_name:  # small tail on the first bubble of a turn, toward the speaker
+            tip = left + w + 7 if mine else left - 7
+            base = left + w - 1 if mine else left + 1
+            canvas.create_polygon(base, y + 8, tip, y + 12, base, y + 18, fill=fill, outline="")
         canvas.coords(text, left + BUBBLE_PAD[0], y + BUBBLE_PAD[1])
         canvas.tag_raise(text)
         if moment:
             stamp_x, anchor = (left - 6, "se") if mine else (left + w + 6, "sw")
             canvas.create_text(stamp_x, y + h, text=time_label(moment), anchor=anchor, font=META_FONT, fill=SUBTLE)
-        return y + h + 8
+        return y + h + 6
 
     def _scroll(self, event: tk.Event) -> None:
         super()._scroll(event)

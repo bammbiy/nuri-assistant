@@ -5,6 +5,8 @@ import tkinter as tk
 from pathlib import Path
 
 ALPHA_CUT = 110  # same cut as tools/key_alpha.py
+FACE_CENTER = (202, 187)  # eye midpoint in every bust frame (tools/build_frames.py EYE_OUT)
+FACE_HALF = 92
 
 
 class CharacterArt:
@@ -19,6 +21,7 @@ class CharacterArt:
         self.user_dir = user_dir
         self.assets_dir = assets_dir
         self._images: dict[tuple[Path, tuple[int, int], bool], tk.PhotoImage | None] = {}
+        self._faces: dict[tuple[str, int, str], tk.PhotoImage | None] = {}
 
     def art_dirs(self, persona_id: str, full: bool) -> list[Path]:
         """Where frames are looked up; full-body art is used only when it exists, never mixed."""
@@ -74,6 +77,37 @@ class CharacterArt:
         except (OSError, ValueError):  # unreadable or broken personal images fall back to the placeholder
             image = None
         self._images[(path, box, hard_edges)] = image
+        return image
+
+    def face(self, persona_id: str, size: int, background: str) -> tk.PhotoImage | None:
+        """Round face icon (MomoTalk style) cut from the neutral bust frame, or None.
+
+        Bust frames put the midpoint between the eyes at FACE_CENTER, so the same square works
+        for every character. Needs Pillow for the round mask; without it the log shows names only.
+        """
+
+        key = (persona_id, size, background)
+        if key in self._faces:
+            return self._faces[key]
+        image = None
+        path = self.image_path("neutral", persona_id, full=False)
+        if path is not None:
+            try:
+                from PIL import Image, ImageDraw, ImageTk
+
+                cx, cy, half = FACE_CENTER[0], FACE_CENTER[1] - 8, FACE_HALF
+                picture = Image.open(path).convert("RGBA").crop((cx - half, cy - half, cx + half, cy + half))
+                tile = Image.new("RGBA", picture.size, background)
+                tile.alpha_composite(picture)
+                scale = 4  # draw the circle large, then shrink: smooth edge on any Tk
+                mask = Image.new("L", (size * scale, size * scale), 0)
+                ImageDraw.Draw(mask).ellipse((0, 0, size * scale - 1, size * scale - 1), fill=255)
+                tile = tile.resize((size, size), Image.LANCZOS)
+                tile.putalpha(mask.resize((size, size), Image.LANCZOS))
+                image = ImageTk.PhotoImage(tile, master=self.master)
+            except (ImportError, OSError, ValueError):
+                image = None
+        self._faces[key] = image
         return image
 
 

@@ -107,6 +107,7 @@ tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창�
 ## UI 관례
 
 - 색과 공용 위젯은 `ui/theme.py` (파스텔 라일락: 배경 `#f6f2fb`, 강조 `#a68ae0`, 글자 `#2f2640`, 오늘/달성 `#3fae94`, 위험 `#e06c8a`). 새 창은 기본 ttk 표 대신 이 톤의 캔버스 카드로 만듭니다(일정·할 일·최저가 창 참고). 삭제는 두 번 눌러야 되게 합니다(`ui/windows/cards.py`의 `CardListMixin`). 색·글꼴은 `theme`에서 가져오고, 일부러 다른 색만 모듈에 따로 둡니다.
+- 말풍선은 **모모톡(블루 아카이브 메신저) 스타일**: 캐릭터 말은 남회색 `MOMO_BUBBLE` 바탕에 흰 글씨, 내 말은 파란 `MOMO_USER`, 머리 위 말풍선의 이름표는 핑크 `MOMO_PINK`(모두 `theme.py`). 대화 기록 창은 동그란 얼굴(`CharacterArt.face`, 상반신 frame의 눈 위치 기준으로 잘라 원형 마스크, Pillow 없으면 이름만)과 이름, 말 차례의 첫 말풍선에만 꼬리. 그 밖의 창(일정·할 일·설정 등)은 파스텔 라일락 그대로.
 - 글꼴은 앱에 같이 들어 있는 **나눔스퀘어라운드**(`assets/fonts/`, OFL 1.1, 블루 아카이브 모모톡 같은 둥근 고딕 느낌, Regular·Bold만). `theme.FONT` 하나만 쓰고 글꼴 이름을 직접 적지 않습니다. Windows는 `AddFontResourceEx(FR_PRIVATE)`로 이 프로세스에만 등록하고(설치 안 함), 실패하면 맑은 고딕. 새 Tk 루트를 만들면 `apply_default_fonts(root)`로 메뉴·대화상자·ttk 글꼴도 맞춥니다. 컨테이너에서 화면을 찍을 때는 `~/.local/share/fonts`에 복사하고 `fc-cache -f`.
 - 캐릭터 창 캔버스 겹침 순서: 캐릭터 → 타이머 배지(`timer`) → 말풍선(`bubble`) → 확인 카드(`confirm`) → 채팅창(`chat`). 캐릭터를 다시 그린 뒤 이 순서로 `tag_raise`합니다.
 - 창 위치(`screen.py`, Tk 없음, `tests/test_screen.py`): 처음엔 주 모니터 **작업 영역**(작업 표시줄 제외, Windows `SPI_GETWORKAREA`)의 오른쪽 아래, 가장자리에서 16px. 사용자가 끌어다 놓은 위치는 저장하고, 다음 실행 때 **모든 모니터를 합친 영역**(가상 화면) 안에 80px 이상 보이면 그대로 둡니다(두 번째 모니터 유지). 화면 밖이면(모니터를 뺐을 때 등) 다시 오른쪽 아래로.

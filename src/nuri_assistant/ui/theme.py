@@ -54,6 +54,13 @@ TODAY = "#3fae94"
 DANGER = "#e06c8a"
 SOFT = "#f1ebfa"
 SOFT_HOVER = "#e4d9f6"
+# MomoTalk-style chat (Blue Archive's messenger): slate character bubbles, blue for the user.
+MOMO_BUBBLE = "#4c5a6f"
+MOMO_BUBBLE_LINE = "#3f4b5e"
+MOMO_SHADOW = "#c9cfd8"
+MOMO_USER = "#4a8fd4"
+MOMO_PINK = "#f6849b"
+MOMO_NAME = "#4c5a6f"
 
 
 def round_rect(canvas: tk.Canvas, x1: float, y1: float, x2: float, y2: float, r: int, **options: object) -> int:

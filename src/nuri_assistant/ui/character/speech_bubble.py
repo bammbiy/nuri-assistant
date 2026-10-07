@@ -2,19 +2,17 @@ from __future__ import annotations
 
 import tkinter as tk
 
-from ..theme import FONT, TEXT, draw_pill, round_rect
+from ..theme import FONT, MOMO_BUBBLE, MOMO_BUBBLE_LINE, MOMO_PINK, MOMO_SHADOW, draw_pill, round_rect
 
 TAG = "bubble"
 BUBBLE_FONT = (FONT, 11)
-BUBBLE_LINE = "#c9b6ea"
-BUBBLE_SHADOW = "#e7def5"
-BUBBLE_PLATE = "#9b7fdc"
+RADIUS = 10
 # Long text is trimmed from the front until the bubble's top stays below this y.
 MIN_TOP = 34
 
 
 class SpeechBubble:
-    """Visual-novel style bubble above the character's head, with a name plate.
+    """MomoTalk-style bubble above the character's head: slate fill, white text, pink name plate.
 
     A bubble may carry a link (price alerts); the owner opens take_link() when it is clicked.
     Showing different text drops the link.
@@ -43,7 +41,7 @@ class SpeechBubble:
         canvas = self.canvas
         cx, bottom = self.width // 2, head_top - 18
         item = canvas.create_text(cx, bottom, text=text, width=self.width - 64, anchor="s", font=BUBBLE_FONT,
-                                  fill=TEXT, justify="left", tags=TAG)
+                                  fill="#ffffff", justify="left", tags=TAG)
         # Long replies keep their latest part visible; the full text is in the chat log.
         shown = text
         while canvas.bbox(item)[1] < MIN_TOP and len(shown) > 20:
@@ -60,13 +58,13 @@ class SpeechBubble:
             grow = (plate_w + 40 - (bx2 - bx1)) // 2 + 1
             bx1, bx2 = bx1 - grow, bx2 + grow
 
-        round_rect(canvas, bx1, by1 + 3, bx2, by2 + 3, 16, fill=BUBBLE_SHADOW, outline="", tags=TAG)
-        canvas.create_polygon(cx - 9, by2 - 2, cx + 9, by2 - 2, cx + 3, head_top + 4,
-                              fill="#ffffff", outline=BUBBLE_LINE, width=2, tags=TAG)
-        round_rect(canvas, bx1, by1, bx2, by2, 16, fill="#ffffff", outline=BUBBLE_LINE, width=2, tags=TAG)
+        round_rect(canvas, bx1, by1 + 3, bx2, by2 + 3, RADIUS, fill=MOMO_SHADOW, outline="", tags=TAG)
+        canvas.create_polygon(cx - 8, by2 - 2, cx + 8, by2 - 2, cx + 2, head_top + 2,
+                              fill=MOMO_BUBBLE, outline=MOMO_BUBBLE_LINE, width=1, tags=TAG)
+        round_rect(canvas, bx1, by1, bx2, by2, RADIUS, fill=MOMO_BUBBLE, outline=MOMO_BUBBLE_LINE, width=1, tags=TAG)
         # Open the outline where the tail joins the bubble.
-        canvas.create_line(cx - 7, by2, cx + 8, by2, fill="#ffffff", width=3, tags=TAG)
-        draw_pill(canvas, bx1 + 14, by1 - 11, bx1 + 14 + plate_w, by1 + 11, fill=BUBBLE_PLATE, tags=TAG)
-        canvas.coords(plate, bx1 + 14 + plate_w / 2, by1)
+        canvas.create_line(cx - 7, by2, cx + 7, by2, fill=MOMO_BUBBLE, width=2, tags=TAG)
+        draw_pill(canvas, bx1 + 12, by1 - 11, bx1 + 12 + plate_w, by1 + 11, fill=MOMO_PINK, tags=TAG)
+        canvas.coords(plate, bx1 + 12 + plate_w / 2, by1)
         canvas.tag_raise(plate)
         canvas.tag_raise(item)
