@@ -155,7 +155,10 @@ class ChatBox:
             self._hint_on = False
 
     def focused(self) -> bool:
-        return self.canvas.focus_get() is self.entry
+        try:
+            return self.canvas.focus_get() is self.entry
+        except (KeyError, tk.TclError):  # focus on a Tk-internal window, e.g. a Combobox dropdown
+            return False
 
     def focus(self) -> None:
         self.show()

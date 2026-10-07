@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import queue
 import random
 import sys
@@ -23,6 +24,7 @@ from ..companion import (
     save_settings,
 )
 from ..companion import ToolBox
+from ..crashlog import log_exception
 from ..focus import FocusTimer, FocusTools
 from ..pricewatch import CheckResult, NaverShopping, PriceChecker, PriceTools, WatchAction, WatchStore, won
 from ..schedule import Event, PendingAction, ScheduleStore, ScheduleTools
@@ -102,6 +104,8 @@ class MascotApp(tk.Tk):
             on_error=lambda message: self.events.put(("voice_error", message)),
         )
         self._ja_cache: dict[str, str] = {}
+        self._held_notices: list[tuple[str, str]] = []
+        self._reporting_error = False
         self._voice_error_shown = False
         self._price_checking = False
         self._bubble_link = ""
@@ -143,6 +147,33 @@ class MascotApp(tk.Tk):
         self.after(3500, self._blink)
         self.after(120, self._watch_pointer)
         threading.Thread(target=self._check_model, daemon=True).start()
+
+    def report_callback_exception(self, exc_type, value, tb) -> None:
+        """Errors inside Tk callbacks: log them and make sure the user still has a window.
+
+        Tk's default prints to stderr (invisible without a console) and leaves a withdrawn
+        window hidden, which looks exactly like "the app does not start".
+        """
+
+        path = log_exception(exc_type, value, tb)
+        if self._reporting_error:
+            return
+        self._reporting_error = True
+        try:
+            if self.state() == "withdrawn":
+                self._reveal()
+            where = f"\n기록: {path}" if path else ""
+            self.say(f"앗, 오류가 났어요.\n{value!r}{where}", "sad")
+        except Exception as exc:  # noqa: BLE001 - reporting must never raise
+            log_exception(type(exc), exc, exc.__traceback__)
+        finally:
+            self._reporting_error = False
+
+    def _reveal(self) -> None:
+        # Borderless windows need the flag re-applied after being withdrawn (Windows).
+        self.overrideredirect(True)
+        self.deiconify()
+        self.attributes("-topmost", True)
 
     @property
     def persona(self):
@@ -268,6 +299,12 @@ class MascotApp(tk.Tk):
     def _watch_pointer(self) -> None:
         """Show the chat box while the mouse is on the character (or the box itself)."""
 
+        try:
+            self._update_hover()
+        finally:
+            self.after(120, self._watch_pointer)
+
+    def _update_hover(self) -> None:
         px, py = self.winfo_pointerxy()
         x, y = px - self.canvas.winfo_rootx(), py - self.canvas.winfo_rooty()
         box = self.canvas.bbox("character")
@@ -285,7 +322,6 @@ class MascotApp(tk.Tk):
             self.chat.show()
         elif self.chat.visible and (now - self._last_hover) * 1000 > CHAT_HIDE_DELAY_MS:
             self.chat.hide()
-        self.after(120, self._watch_pointer)
 
     def set_display_mode(self, mode: str) -> None:
         """Switch bust/full body; the window grows upward so the character's feet stay put."""
@@ -363,9 +399,9 @@ class MascotApp(tk.Tk):
         except ImportError:
             try:
                 image = _fit_photo(tk.PhotoImage(master=self, file=str(path)), box)
-            except tk.TclError:
+            except (tk.TclError, ValueError):
                 image = None
-        except OSError:
+        except (OSError, ValueError):  # unreadable or broken personal images fall back to the placeholder
             image = None
         self._images[(path, box)] = image
         return image
@@ -519,42 +555,56 @@ class MascotApp(tk.Tk):
     def _drain_events(self) -> None:
         try:
             while True:
-                kind, *values = self.events.get_nowait()
-                if kind == "update":
-                    visible, expression = values
-                    if visible:
-                        self._start_talking()
-                        self.say(visible, expression)
-                elif kind == "done":
-                    text, expression, actions, spoken = values
-                    self.talking = False
-                    self.say(text, expression)
-                    self.speak(text, japanese=spoken)
-                    self._set_busy(False)
-                    if actions:
-                        self.pending_actions = list(actions)
-                        self._show_next_card()
-                elif kind == "error":
-                    self.talking = False
-                    self.say(f"앗, 문제가 생겼어요.\n{values[0]}", "sad")
-                    self._set_busy(False)
-                elif kind == "voice":
-                    if values[0]:
-                        self._start_talking()
-                    else:
+                event = self.events.get_nowait()
+                try:
+                    self._handle_event(*event)
+                except Exception:  # noqa: BLE001 - one bad event must not stop the loop
+                    self.report_callback_exception(*sys.exc_info())
+                    if event[0] in ("done", "error"):
                         self.talking = False
-                elif kind == "voice_error":
-                    if not self._voice_error_shown:
-                        self._voice_error_shown = True
-                        self.say(f"목소리가 안 나와요.\n{values[0]}", "sad")
-                elif kind == "prices":
-                    self._show_price_results(values[0])
-                elif kind == "notice":
-                    message, expression = values
-                    self.say(message, expression)
+                        self._set_busy(False)
         except queue.Empty:
             pass
-        self.after(50, self._drain_events)
+        finally:
+            self.after(50, self._drain_events)
+
+    def _handle_event(self, kind: str, *values) -> None:
+        if kind == "update":
+            visible, expression = values
+            if visible:
+                self._start_talking()
+                self.say(visible, expression)
+        elif kind == "done":
+            text, expression, actions, spoken = values
+            self.talking = False
+            self.say(text, expression)
+            self.speak(text, japanese=spoken)
+            self._set_busy(False)
+            if actions:
+                self.pending_actions = list(actions)
+                self._show_next_card()
+        elif kind == "error":
+            self.talking = False
+            self.say(f"앗, 문제가 생겼어요.\n{values[0]}", "sad")
+            self._set_busy(False)
+        elif kind == "voice":
+            if values[0]:
+                self._start_talking()
+            else:
+                self.talking = False
+        elif kind == "voice_error":
+            if not self._voice_error_shown:
+                self._voice_error_shown = True
+                self.say(f"목소리가 안 나와요.\n{values[0]}", "sad")
+        elif kind == "prices":
+            self._show_price_results(values[0])
+        elif kind == "notice":
+            message, expression = values
+            if self.state() == "withdrawn":
+                # The picker is still open; the greeting after picking would overwrite it.
+                self._held_notices.append((message, expression))
+            else:
+                self.say(message, expression)
 
     def _set_busy(self, busy: bool) -> None:
         self.busy = busy
@@ -602,6 +652,12 @@ class MascotApp(tk.Tk):
         self._show_next_card()
 
     def _check_reminders(self) -> None:
+        try:
+            self._remind_due()
+        finally:
+            self.after(REMINDER_POLL_MS, self._check_reminders)
+
+    def _remind_due(self) -> None:
         if self.state() != "withdrawn" and not self.busy:
             now = datetime.now()
             due = self.schedule.due_reminders(now)
@@ -617,7 +673,6 @@ class MascotApp(tk.Tk):
                 when = "내일까지" if kind == "eve" else "오늘까지"
                 self.talk(self.persona.todo_nag.format(title=todo.title, when=when), "angry" if kind == "day" else "thinking")
                 self.bell()
-        self.after(REMINDER_POLL_MS, self._check_reminders)
 
     def brief_today(self, force: bool = False) -> None:
         """Once a day (or on request), list today's events in the character's voice."""
@@ -799,18 +854,23 @@ class MascotApp(tk.Tk):
             return self._load_image(path, box) if path else None
 
         def picked(persona_id: str, remember: bool) -> None:
-            self._update_settings(pick_on_start=not remember)
             if startup:
-                # Borderless windows need the flag re-applied after being withdrawn (Windows).
-                self.overrideredirect(True)
-                self.deiconify()
-                self.attributes("-topmost", True)
+                self._reveal()  # first, so a later error cannot leave the app invisible
+            self._update_settings(pick_on_start=not remember)
             if startup or persona_id != self.persona.id:
                 self.switch_persona(persona_id)
             if startup:
                 self.after(BRIEFING_DELAY_MS, self.brief_today)
+                for index, (message, expression) in enumerate(self._held_notices):
+                    self.after(3500 + index * 4000, lambda m=message, e=expression: self.say(m, e))
+                self._held_notices.clear()
 
-        CharacterPicker(self, PERSONAS.values(), self.persona.id, thumbnail, picked, remember=not self.settings.pick_on_start)
+        try:
+            CharacterPicker(self, PERSONAS.values(), self.persona.id, thumbnail, picked, remember=not self.settings.pick_on_start)
+        except Exception:  # noqa: BLE001 - start with the last character instead of staying hidden
+            self.report_callback_exception(*sys.exc_info())
+            if startup:
+                picked(self.persona.id, not self.settings.pick_on_start)
 
     def switch_persona(self, persona_id: str) -> None:
         if self.busy:
@@ -886,10 +946,10 @@ def _fit_photo(image: tk.PhotoImage, box: tuple[int, int]) -> tk.PhotoImage:
     target = min(box[0] / image.width(), box[1] / image.height(), 1.0)
     if target >= 1.0:
         return image
-    zoom, sub = max(
-        ((z, s) for s in range(1, 7) for z in range(1, s + 1) if z / s <= target),
-        key=lambda pair: pair[0] / pair[1],
-    )
+    ratios = [(z, s) for s in range(1, 7) for z in range(1, s + 1) if z / s <= target]
+    if not ratios:  # shrinking more than 6x: plain subsample
+        return image.subsample(math.ceil(1 / target))
+    zoom, sub = max(ratios, key=lambda pair: pair[0] / pair[1])
     if zoom > 1:
         image = image.zoom(zoom)
     return image.subsample(sub) if sub > 1 else image

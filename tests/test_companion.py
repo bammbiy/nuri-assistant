@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
 
+from src.nuri_assistant.crashlog import log_exception
 from src.nuri_assistant import HistoryStore, RenameError, RenameInput, apply_batch_rename, preview_batch, undo_last_batch
 from src.nuri_assistant.companion import (
     EXPRESSIONS,
@@ -227,6 +228,42 @@ class SettingsTest(unittest.TestCase):
             path.write_text("{broken", encoding="utf-8")
 
             self.assertEqual(load_settings(path), CompanionSettings())
+            self.assertTrue((Path(tmp) / "companion.json.bak").exists(), "a broken file is kept before defaults overwrite it")
+
+    def test_notepad_encodings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "companion.json"
+            text = json.dumps({"user_name": "민수", "naver_client_id": "abc"}, ensure_ascii=False)
+            for encoding in ("utf-8-sig", "cp949"):
+                path.write_bytes(text.encode(encoding))
+
+                settings = load_settings(path)
+
+                self.assertEqual((settings.user_name, settings.naver_client_id), ("민수", "abc"), encoding)
+
+    def test_non_object_json_uses_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "companion.json"
+            path.write_text("[]", encoding="utf-8")
+
+            self.assertEqual(load_settings(path), CompanionSettings())
+
+
+class CrashLogTest(unittest.TestCase):
+    def test_traceback_is_appended(self) -> None:
+        import sys
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "sub" / "error.log"
+            for message in ("첫 오류", "두 번째"):
+                try:
+                    raise RuntimeError(message)
+                except RuntimeError:
+                    self.assertEqual(log_exception(*sys.exc_info(), path=path), path)
+
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("RuntimeError: 첫 오류", text)
+            self.assertIn("RuntimeError: 두 번째", text)
 
 
 if __name__ == "__main__":

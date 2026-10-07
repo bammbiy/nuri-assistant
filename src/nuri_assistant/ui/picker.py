@@ -33,6 +33,9 @@ class CharacterPicker(tk.Toplevel):
         remember: bool = False,
     ) -> None:
         super().__init__(master)
+        # Registered first: if building the cards fails, closing still starts the app.
+        self.protocol("WM_DELETE_WINDOW", lambda: self._pick(self.current_id))
+        self.bind("<Escape>", lambda _event: self._pick(self.current_id))
         self.title("비서 선택")
         self.configure(bg=BG)
         self.resizable(False, False)
@@ -62,8 +65,6 @@ class CharacterPicker(tk.Toplevel):
         ).pack(side="left")
         tk.Label(footer, text="메뉴 ⋯ > 비서 선택에서 언제든 바꿀 수 있어요", font=(FONT, 9), bg=BG, fg=SUBTLE).pack(side="right")
 
-        self.protocol("WM_DELETE_WINDOW", lambda: self._pick(self.current_id))
-        self.bind("<Escape>", lambda _event: self._pick(self.current_id))
         self._center()
         self.focus_force()
 

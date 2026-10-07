@@ -34,11 +34,24 @@ class CompanionSettings:
 
 
 def load_settings(path: Path) -> CompanionSettings:
+    """Read companion.json; an unreadable file is kept as companion.json.bak, not overwritten later."""
+
     if not path.exists():
         return CompanionSettings()
+    data = None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        raw = path.read_bytes()
+        # Notepad may save with a BOM or in the Korean ANSI code page (cp949).
+        for encoding in ("utf-8-sig", "cp949"):
+            try:
+                data = json.loads(raw.decode(encoding))
+                break
+            except ValueError:
+                continue
+    except OSError:
+        return CompanionSettings()
+    if not isinstance(data, dict):
+        _keep_backup(path)
         return CompanionSettings()
     known = {field.name for field in fields(CompanionSettings)}
     return replace(CompanionSettings(), **{key: value for key, value in data.items() if key in known})
@@ -47,3 +60,12 @@ def load_settings(path: Path) -> CompanionSettings:
 def save_settings(path: Path, settings: CompanionSettings) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(asdict(settings), ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _keep_backup(path: Path) -> None:
+    backup = path.with_name(path.name + ".bak")
+    if not backup.exists():
+        try:
+            backup.write_bytes(path.read_bytes())
+        except OSError:
+            pass

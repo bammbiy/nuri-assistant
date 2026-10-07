@@ -13,10 +13,10 @@
 ## 실행과 테스트
 
 ```bash
-python src/run_nuri.py            # 캐릭터 비서 (비서 선택 화면부터)
+python src/run_nuri.py            # 캐릭터 비서 (비서 선택 화면부터). Windows는 start_nuri.bat 더블클릭
 python src/run_nuri.py --classic  # 파일 정리 도구만
 python -m unittest discover -s tests                         # 저장소 루트에서 (테스트는 src.nuri_assistant 로 import)
-python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 75개 통과)
+python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 78개 통과)
 python -m pyflakes src tests tools
 python tools/build_frames.py nuri|sera|yuki [출력폴더]              # 캐릭터 프레임 재생성 (pillow numpy scipy rembg onnxruntime 필요)
 ```
@@ -48,7 +48,7 @@ assets/characters/<id>/full/   전신 프레임 405×480
 tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터별 좌표는 CHARACTERS 설정)
 ```
 
-사용자 데이터(`~/.nuri-assistant/`): `companion.json`(설정·네이버 API 키), `companion.sqlite3`(대화·일정·할 일·가격 감시), `history.sqlite3`(파일 이름 변경 이력), `characters/<id>/`(개인 캐릭터 이미지, 저장소보다 우선).
+사용자 데이터(`~/.nuri-assistant/`): `companion.json`(설정·네이버 API 키, 못 읽으면 `.bak`로 보존), `error.log`(예외 기록), `companion.sqlite3`(대화·일정·할 일·가격 감시), `history.sqlite3`(파일 이름 변경 이력), `characters/<id>/`(개인 캐릭터 이미지, 저장소보다 우선).
 
 ## 설계 원칙 (꼭 지킬 것)
 
@@ -66,6 +66,8 @@ tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터�
 - 파일 이동은 `core.operations.move_no_clobber`만 씁니다. `Path.rename`은 macOS/Linux에서 기존 파일을 덮어씁니다.
 - 새 도구 묶음은 `specs`, `execute`, `take_pending`, `owns`, `confirm`을 갖춘 클래스로 만들어 `MascotApp`의 `ToolBox([...])`에 넣고, 페르소나 시스템 프롬프트(`personas.py`의 `abilities`)에 쓰임새를 한 줄 추가합니다. 확인 카드는 액션의 `kind`(add/done/cancel/delete), `heading`, `when`, `title`만 읽습니다.
 - 테스트용 가짜 클라이언트의 `chat_stream`은 `(model, messages, options=None, tools=None)`을 받아야 합니다.
+- 오류가 나도 창은 보여야 합니다. 시작 실패는 `run_nuri.py`가 `crashlog`로 `error.log`에 남기고 안내창을 띄웁니다. Tk 콜백 예외는 `MascotApp.report_callback_exception`이 기록하고, 숨겨진 창(비서 선택 중)이면 다시 보이게 합니다. `after()`로 반복하는 루프는 본문을 별도 함수로 빼고 `finally`에서 다시 예약합니다(예외 한 번에 루프가 멈추면 앱이 굳은 것처럼 보임).
+- 텍스트 파일은 항상 `encoding=`을 지정합니다(한국어 Windows 기본은 cp949). 사용자가 메모장으로 고칠 수 있는 파일은 `utf-8-sig`와 cp949도 읽습니다.
 - 백그라운드 작업(모델 호출, 가격 조회, 음성 합성)은 스레드에서 돌리고 결과는 `MascotApp.events` 큐로 넘깁니다. 스레드에서 Tk 위젯을 직접 만지지 않습니다.
 - 말풍선과 음성을 함께 낼 때는 `MascotApp.talk()`, 말풍선만이면 `say()`. 오류·안내 문구는 읽지 않습니다.
 - 모델 답변의 일본어 음성 대사는 `<ja>…</ja>`로 받고 `ReplyParser.voice`에 담깁니다(말풍선과 대화 기억에는 남기지 않음).
