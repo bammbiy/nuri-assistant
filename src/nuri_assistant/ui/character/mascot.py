@@ -37,6 +37,7 @@ from ..windows.price_settings import PriceSettingsWindow
 from ..windows.schedule import ScheduleWindow
 from ..windows.todo import TodoWindow
 from ..windows.voice_settings import VoiceSettingsWindow
+from ..theme import apply_default_fonts
 from .art import CharacterArt
 from .chatbox import HEIGHT as CHAT_HEIGHT, ChatBox, subject_particle
 from .confirm_card import HEIGHT as CARD_HEIGHT, ConfirmCard
@@ -93,6 +94,7 @@ class MascotApp(tk.Tk):
 
     def __init__(self, app_dir: Path = APP_DIR) -> None:
         super().__init__()
+        apply_default_fonts(self)
         self.settings_path = app_dir / SETTINGS_PATH.name
         self.settings = load_settings(self.settings_path)
         services = Services(app_dir, lambda: self.settings)

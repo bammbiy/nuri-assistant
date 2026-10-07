@@ -4,8 +4,43 @@ import sys
 import tkinter as tk
 import tkinter.font as tkfont
 
+from ..paths import FONTS_DIR
 
-FONT = "Malgun Gothic" if sys.platform == "win32" else "TkDefaultFont"
+BUNDLED_FONT = "NanumSquareRound"  # rounded gothic shipped in assets/fonts (OFL 1.1)
+
+
+def _register_bundled_font() -> bool:
+    """Make the bundled TTFs usable by name for this process only (nothing is installed).
+
+    Windows: AddFontResourceEx with FR_PRIVATE, before any Tk font is created. Elsewhere Tk
+    finds the font only if it is installed; fontconfig substitutes a similar one otherwise.
+    """
+
+    files = sorted(FONTS_DIR.glob("*.ttf"))
+    if not files:
+        return False
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+
+        add = ctypes.windll.gdi32.AddFontResourceExW
+        return sum(add(str(path), 0x10, 0) for path in files) > 0  # 0x10 = FR_PRIVATE
+    except (AttributeError, OSError):
+        return False
+
+
+FONT = BUNDLED_FONT if _register_bundled_font() else ("Malgun Gothic" if sys.platform == "win32" else "TkDefaultFont")
+
+
+def apply_default_fonts(root: tk.Misc) -> None:
+    """Point Tk's named fonts at FONT so menus, dialogs and ttk widgets match the canvas text."""
+
+    for name in ("TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont", "TkCaptionFont", "TkSmallCaptionFont", "TkTooltipFont"):
+        try:
+            tkfont.nametofont(name, root=root).configure(family=FONT)
+        except tk.TclError:
+            pass
 
 BG = "#f6f2fb"
 CARD = "#ffffff"

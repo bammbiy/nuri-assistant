@@ -17,6 +17,7 @@ from ...classic.core import (
 from ...classic.metadata import infer_metadata
 from ...classic.storage import HistoryStore, WorkProfile, load_profiles, save_profile
 from ...paths import HISTORY_DB, PROFILES_PATH
+from ..theme import apply_default_fonts
 from .assistant import AssistantWindow
 
 
@@ -402,6 +403,7 @@ def run() -> None:
     """Open only the file rename tool, without the desktop character."""
 
     root = tk.Tk()
+    apply_default_fonts(root)
     root.withdraw()
     app = NuriAssistantApp(root)
     app.protocol("WM_DELETE_WINDOW", root.destroy)

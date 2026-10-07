@@ -29,7 +29,7 @@ python tools/build_frames.py nuri|sera|yuki|akane [출력폴더]   # 캐릭터 �
 - 단위 테스트는 tkinter 없이 돌아갑니다. `ui/`는 단위 테스트에서 import하지 않습니다. 그래서 UI 모듈의 import 오류는 테스트로 안 잡히니, UI 파일을 옮기거나 import를 고치면 아래 방법으로 앱을 띄워 메뉴의 창을 모두 열어 봅니다.
 - 패키지 정보는 `pyproject.toml`(버전은 `nuri_assistant.__version__`과 같이 올림), 편집기 설정은 `.editorconfig`(`start_nuri.bat`은 일부러 cp949 + CRLF).
 - UI 확인 방법(클라우드 컨테이너): tkinter가 있는 `python3.12`로 `xvfb-run -a -s "-screen 0 1280x1000x24" python3.12 스크립트.py`를 실행하고, `import -window root -crop WxH+X+Y`로 캡처합니다. 가짜 Ollama·네이버·VOICEVOX 서버는 `http.server`로 만들어 `ollama_url`, `NaverShopping.URL`, `voice_url`을 그쪽으로 돌립니다. `MascotApp(app_dir)`에 임시 폴더를 넘기면 사용자 데이터를 건드리지 않습니다.
-- 컨테이너에서 확인할 수 없는 것: Windows 투명 배경(`-transparentcolor`), 맑은 고딕, 테두리 없는 창의 포커스, 고배율(125%/150%) 화면, 실제 Ollama·VOICEVOX·네이버 API. 이것들은 아직 실사용 확인 전입니다.
+- 컨테이너에서 확인할 수 없는 것: Windows 투명 배경(`-transparentcolor`), Windows에서 번들 글꼴 등록(`AddFontResourceEx`), 테두리 없는 창의 포커스, 고배율(125%/150%) 화면, 실제 Ollama·VOICEVOX·네이버 API. 이것들은 아직 실사용 확인 전입니다.
 
 ## 구조
 
@@ -103,6 +103,7 @@ tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터�
 ## UI 관례
 
 - 색과 공용 위젯은 `ui/theme.py` (파스텔 라일락: 배경 `#f6f2fb`, 강조 `#a68ae0`, 글자 `#2f2640`, 오늘/달성 `#3fae94`, 위험 `#e06c8a`). 새 창은 기본 ttk 표 대신 이 톤의 캔버스 카드로 만듭니다(일정·할 일·최저가 창 참고). 삭제는 두 번 눌러야 되게 합니다(`ui/windows/cards.py`의 `CardListMixin`). 색·글꼴은 `theme`에서 가져오고, 일부러 다른 색만 모듈에 따로 둡니다.
+- 글꼴은 앱에 같이 들어 있는 **나눔스퀘어라운드**(`assets/fonts/`, OFL 1.1, 블루 아카이브 모모톡 같은 둥근 고딕 느낌, Regular·Bold만). `theme.FONT` 하나만 쓰고 글꼴 이름을 직접 적지 않습니다. Windows는 `AddFontResourceEx(FR_PRIVATE)`로 이 프로세스에만 등록하고(설치 안 함), 실패하면 맑은 고딕. 새 Tk 루트를 만들면 `apply_default_fonts(root)`로 메뉴·대화상자·ttk 글꼴도 맞춥니다. 컨테이너에서 화면을 찍을 때는 `~/.local/share/fonts`에 복사하고 `fc-cache -f`.
 - 캐릭터 창 캔버스 겹침 순서: 캐릭터 → 타이머 배지(`timer`) → 말풍선(`bubble`) → 확인 카드(`confirm`) → 채팅창(`chat`). 캐릭터를 다시 그린 뒤 이 순서로 `tag_raise`합니다.
 - 채팅창은 캐릭터에 마우스를 올렸을 때만 보이고, 마우스만으로는 입력 포커스를 가져오지 않습니다.
 - 프레임은 1:1로 보여 줍니다(상반신 405×344, 전신 405×480, 창 폭 `WIDTH = 415`). 실행 중 리샘플링은 화질을 떨어뜨리니 크기를 바꾸려면 `tools/build_frames.py`의 `W, H`/`FULL_W, FULL_H`와 `WIDTH`를 같이 바꿉니다.

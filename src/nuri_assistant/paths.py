@@ -16,3 +16,4 @@ ERROR_LOG = APP_DIR / "error.log"
 USER_CHARACTERS = APP_DIR / "characters"  # personal art, preferred over the bundled frames
 
 ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets" / "characters"
+FONTS_DIR = ASSETS_DIR.parent / "fonts"  # bundled UI font (NanumSquareRound, OFL)
