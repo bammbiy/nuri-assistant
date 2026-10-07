@@ -89,31 +89,28 @@ CHARACTERS = {
         ),
     ),
     "yuki": dict(
+        # Second sheet set (2026-10-07), redrawn in the shared style; the first set was semi-real.
         eye_px=0.767 * 89,
         base=dict(
-            sheet="reference_sheet.webp", crop=(1040, 0, 1960, 1116), mid=(1467.5, 346.5), dist=125,
-            talk=((1472, 437), (21, 15.6)),
-            blink=((1358, 1442, 328, 368), (1498, 1584, 322, 362)), skin="lerp", lash=3.0, feather=1.5,
+            sheet="reference_sheet.webp", crop=(1080, 0, 1960, 1116), mid=(1497.5, 362), dist=137,
+            talk=((1505, 458), (21, 15)),
+            blink=((1388, 1470, 343, 392), (1525, 1610, 343, 392)), skin=(1500, 385), lash=3.0, feather=2.0,
         ),
-        # erase: sheet boxes where semi-transparent leftovers of the background (a sticky note
-        # and the board edge beside the hair) are dropped; the opaque hair stays.
-        full=dict(crop=(170, 60, 580, 1116), top=87, bottom=1099, mid=(373, 184.5), dist=49.5,
-                  erase=((420, 60, 580, 240),),
-                  face=dict(oval=(1.0, -0.55, 1.25), bottom={"thinking": 0.92})),
+        # Sheet background decorations (calendar, notes) are separate blobs and get dropped.
+        full=dict(crop=(180, 40, 570, 1116), top=72, bottom=1098, mid=(374.5, 191), dist=59,
+                  face=dict(oval=(0.95, -0.55, 1.05))),
         expressions=dict(
+            # Each panel has a white frame line: crop inside it. Rows also stop above the labels.
             sheet="reference_expressions.webp",
-            # Rows stop above the Korean/English labels printed under each face.
-            columns=((60, 690), (700, 1320), (1330, 1960)), rows=((40, 470), (590, 965)),
-            mids=dict(happy=(397, 219), thinking=(1001.5, 220.5), surprised=(1602.5, 228),
-                      sad=(387.5, 770), angry=(1001, 772), shy=(1596, 772)),
-            # The panels are not drawn at one scale (and closed or narrowed eyes sit wider apart),
-            # so each has its own eye distance, calibrated by head height against the neutral.
-            dist=dict(happy=77, thinking=79, surprised=81, sad=90, angry=91, shy=90),
-            # Head size/position fix after eye alignment: (scale, dx, dy) in output px, found by
-            # overlaying each frame's hair silhouette and face skin on neutral (best IoU).
-            adjust=dict(happy=(0.965, 1.5, -1.5), thinking=(1.0, 4.5, -1), surprised=(0.995, 6, -1),
-                        sad=(1.05, -3, 5.5), angry=(1.05, 4, 7), shy=(1.02, 0, 6)),
-            talk=dict(thinking=((1001, 278), (11, 8)), sad=((390, 830), (11, 8)), angry=((1000, 833), (11, 8))),
+            columns=((90, 664), (712, 1290), (1336, 1914)), rows=((50, 506), (608, 1022)),
+            mids=dict(happy=(375.5, 240), thinking=(1005, 233), surprised=(1625, 237),
+                      sad=(376.5, 810), angry=(997.5, 810), shy=(1618.5, 810)),
+            dist=dict(happy=91, thinking=84, surprised=80, sad=97, angry=95, shy=93),
+            # Happy's closed eyes sit wider than open ones would, so its eye distance overstates the size.
+            adjust=dict(happy=(1.12, 2.5, 7), thinking=(1.035, 7, 2), surprised=(0.99, 2.5, 5.5),
+                        sad=(1.03, 2.5, 0.5), angry=(1.005, 2.5, 0.5), shy=(0.985, 2, 0.5)),
+            talk=dict(happy=((377, 287), (10, 7)), thinking=((1002, 286), (10, 7)), sad=((377, 870), (10, 7)),
+                      shy=((1620, 872), (10, 7))),
         ),
     ),
     "akane": dict(

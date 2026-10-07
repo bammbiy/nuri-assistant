@@ -124,14 +124,13 @@ python tools/build_frames.py nuri   # 세라는 sera, 유키는 yuki
 
 ## 유키 이미지 현황
 
-`yuki/` 폴더도 같은 방식으로 만들었습니다 (`python tools/build_frames.py yuki`).
+`yuki/` 폴더 (`python tools/build_frames.py yuki`). **2026-10-07에 시트를 다시 뽑았습니다.** 첫 시트는 그림체를 고정하는 프롬프트 전에 뽑아 반실사·흐린 선·회색빛 채색으로 혼자 달라 보였고, 다른 캐릭터 시트를 첨부하고 그림체를 문장으로 고정한 프롬프트로 다시 뽑았습니다(체형은 사용자 친구 요청으로 글래머 강조, 옷은 같음).
 
-- 원본: `reference_sheet.webp`, `reference_expressions.webp` (둘 다 2000×1116)
-- 표정 시트의 칸마다 얼굴 크기가 달라서, 표정별로 눈 사이 거리를 따로 적고(`dist`가 표정별 값), 남은 차이는 `adjust`로 보정했습니다.
-- 칸 아래 한글·영어 이름표가 프레임에 들어오지 않게 자르는 줄(`rows`)을 이름표 위에서 끊었습니다.
-- 말하는 입: `neutral_talk`, `thinking_talk`, `sad_talk`, `angry_talk`
-- 눈 감은 모습은 눈 양옆 피부색을 줄마다 이어 칠하는 방식(`skin="lerp"`)입니다. 볼 홍조가 있는 그림은 한 가지 색으로 덮으면 눈 자리에 얼룩이 보여서입니다.
-- 전신: 머리 옆에 붙은 포스트잇과 배경판의 반투명 잔상을 `erase` 범위에서 지웁니다(불투명한 머리카락은 남음).
+- 원본: `reference_sheet.webp`, `reference_expressions.webp` (둘 다 2000×1116). 기본 시트 배경의 달력·포스트잇은 떨어진 덩어리라 자동으로 지워집니다.
+- 표정 시트 칸마다 흰 테두리 선이 있어 `columns`/`rows`를 테두리 안쪽으로 잡았습니다(이름표도 밖).
+- 기쁨은 눈을 감아 눈 사이 거리가 실제보다 넓게 재져 12% 작게 나와서 `adjust`로 키웠습니다. 나머지 표정 차이는 4% 안.
+- 깜빡임은 두 눈 사이 피부 한 점 색(`skin=(1500, 385)`).
+- 말하는 입: `neutral_talk`, `happy_talk`, `thinking_talk`, `sad_talk`, `shy_talk`.
 
 ## 아카네 이미지 현황
 
