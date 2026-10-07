@@ -791,7 +791,13 @@ class MascotApp(tk.Tk):
             threading.Thread(target=self._check_model, daemon=True).start()
 
     def show_log(self) -> None:
-        ConversationLogWindow(self, self.store, self.persona)
+        persona_id = self.persona.id
+
+        def avatar(box):
+            path = self.art.image_path("neutral", persona_id, full=False)
+            return self.art.load(path, box) if path else None
+
+        ConversationLogWindow(self, self.store, self.persona, avatar)
 
     def clear_memory(self) -> None:
         if messagebox.askyesno("기억 지우기", f"{self.persona.name}와의 대화 기록을 모두 지울까요?", parent=self):
