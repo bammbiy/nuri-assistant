@@ -28,6 +28,7 @@ from src.nuri_assistant import (
     save_profile,
     undo_last_batch,
 )
+from src.nuri_assistant.classic.tools import FileTools, RenameAction, resolve_folder
 
 
 class RenameEngineTest(unittest.TestCase):
@@ -268,6 +269,75 @@ class NoClobberTest(unittest.TestCase):
 
             self.assertEqual(source.read_text(encoding="utf-8"), "new file with the old name")
             self.assertTrue((root / "20260628_ja00_001.pdf").exists())
+
+
+class FileToolsTest(unittest.TestCase):
+    """The chat tools only preview; files change when the confirm card is approved."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.home = Path(self._tmp.name)
+        self.downloads = self.home / "Downloads"
+        self.downloads.mkdir()
+        for name in ("b_scan.pdf", "a_scan.pdf", "memo.txt"):
+            (self.downloads / name).write_text("x", encoding="utf-8")
+        self.history = HistoryStore(self.home / "history.sqlite3")
+        self.tools = FileTools(self.history, home=lambda: self.home)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def names(self) -> list[str]:
+        return sorted(path.name for path in self.downloads.iterdir())
+
+    def test_preview_then_confirm_then_undo(self) -> None:
+        result = self.tools.execute("rename_files", {"folder": "다운로드 폴더", "request": "20260715 ja00 3페이지부터 정리해줘"})
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["count"], 2)
+        self.assertEqual(result["examples"][0], "a_scan.pdf → 20260715_ja00_003.pdf")
+        self.assertEqual(self.names(), ["a_scan.pdf", "b_scan.pdf", "memo.txt"])  # nothing renamed yet
+
+        action = self.tools.take_pending()[0]
+        self.assertTrue(self.tools.owns(action))
+        self.assertEqual((action.kind, action.when), ("rename", "다운로드 2개"))
+        self.assertEqual(action.title, "a_scan.pdf → 20260715_ja00_003.pdf 외 1개")
+        self.assertIn("2개", self.tools.confirm(action))
+        self.assertEqual(self.names(), ["20260715_ja00_003.pdf", "20260715_ja00_004.pdf", "memo.txt"])
+
+        self.assertTrue(self.tools.execute("undo_rename", {})["ok"])
+        undo = self.tools.take_pending()[0]
+        self.assertEqual(undo.kind, "undo")
+        self.assertIn("2개", self.tools.confirm(undo))
+        self.assertEqual(self.names(), ["a_scan.pdf", "b_scan.pdf", "memo.txt"])
+        self.assertFalse(self.tools.execute("undo_rename", {})["ok"])
+
+    def test_page_phrases(self) -> None:
+        for request, page in (("ja00 3페이지부터", "003"), ("ja00 12쪽부터", "012"), ("ja00 p7", "007"),
+                              ("20260715 ja00 1부터", "001"), ("20260715부터 ja00", "001")):
+            self.assertEqual(interpret_file_command(request).page, page, request)
+
+    def test_asks_instead_of_guessing(self) -> None:
+        no_media = self.tools.execute("rename_files", {"folder": "다운로드", "request": "파일 이름 정리해줘"})
+        self.assertFalse(no_media["ok"])
+        self.assertIn("매체코드", no_media["error"])
+        unknown = self.tools.execute("rename_files", {"folder": "회사 폴더", "request": "ja00"})
+        self.assertFalse(unknown["ok"])
+        self.assertEqual(self.tools.take_pending(), [])
+
+    def test_file_changed_after_preview(self) -> None:
+        self.tools.execute("rename_files", {"folder": str(self.downloads), "request": "ja00"})
+        action = self.tools.take_pending()[0]
+        (self.downloads / "b_scan.pdf").unlink()
+        self.assertIn("바꾸지 못했어요", self.tools.confirm(action))
+        self.assertEqual(self.names(), ["a_scan.pdf", "memo.txt"])  # the batch was rolled back
+
+    def test_resolve_folder(self) -> None:
+        onedrive = self.home / "OneDrive" / "바탕 화면"
+        onedrive.mkdir(parents=True)
+        self.assertEqual(resolve_folder("바탕화면", self.home), onedrive)
+        self.assertEqual(resolve_folder("Downloads", self.home), self.downloads)
+        self.assertIsNone(resolve_folder("relative/path", self.home))
+        self.assertIsInstance(RenameAction("undo", "x"), RenameAction)
 
 
 if __name__ == "__main__":

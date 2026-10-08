@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Callable
 
 from .classic.storage import HistoryStore
+from .classic.tools import FileTools
 from .companion import CompanionSettings, ConversationStore, ToolBox
 from .focus import FocusTimer, FocusTools
 from .paths import HISTORY_DB, MEMORY_DB
@@ -37,10 +38,11 @@ class Services:
         self.price_checker = PriceChecker(self.watches, self.price_sources)
         self.todos = TodoStore(db)
         self.focus_timer = FocusTimer()
+        self.history = HistoryStore(app_dir / HISTORY_DB.name)
         self.toolbox = ToolBox([
             ScheduleTools(self.schedule),
             TodoTools(self.todos),
             PriceTools(self.watches, self.price_checker),
             FocusTools(self.focus_timer),
+            FileTools(self.history),
         ])
-        self.history = HistoryStore(app_dir / HISTORY_DB.name)

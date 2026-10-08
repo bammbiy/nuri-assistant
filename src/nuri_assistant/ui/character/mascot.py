@@ -13,6 +13,7 @@ from pathlib import Path
 from tkinter import messagebox, simpledialog
 
 from ...announcements import compose_briefing, nag_line, price_alert_line, reminder_line, timer_line
+from ...classic.tools import RenameAction
 from ...companion import (
     EXPRESSIONS,
     PERSONAS,
@@ -602,7 +603,8 @@ class MascotApp(tk.Tk):
             if isinstance(action, WatchAction) and action.kind == "add":
                 self.check_prices_now()
         else:
-            message = f"알겠어요, '{action.title}'은(는) 그대로 둘게요."
+            what = "파일 이름은" if isinstance(action, RenameAction) else f"'{action.title}'은(는)"
+            message = f"알겠어요, {what} 그대로 둘게요."
             self.companion.note(message, "neutral")
             self.say(message, "neutral")
         self._show_next_card()

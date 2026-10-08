@@ -22,7 +22,8 @@ class FileAssistantPlan:
 
 
 _DATE_PATTERN = re.compile(r"(20\d{2})[-./]?(0[1-9]|1[0-2])[-./]?([0-2]\d|3[01])")
-_PAGE_PATTERN = re.compile(r"(?:p(?:age)?|페이지)\s*(\d{1,4})|(?:(\d{1,4})\s*부터)", re.IGNORECASE)
+# "p3", "페이지 3", "3부터", "3페이지부터", "3쪽부터", "3면부터"
+_PAGE_PATTERN = re.compile(r"(?:p(?:age)?|페이지)\s*(\d{1,4})|(?<!\d)(\d{1,4})\s*(?:페이지|쪽|면|p)?\s*부터", re.IGNORECASE)
 
 
 def interpret_file_command(command: str) -> FileAssistantPlan:

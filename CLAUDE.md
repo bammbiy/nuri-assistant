@@ -22,7 +22,7 @@ python src/run_nuri.py --classic  # 파일 정리 도구만
 python -m nuri_assistant [--classic]   # 같은 실행 (src/ 안에서, 또는 pip install -e . 뒤 어디서나. 설치하면 nuri-assistant 명령도 생김)
 pip install -e .[dev]             # 선택: 개발용 설치(pyflakes). 그림이 assets/에 있어서 편집 설치(-e)만 지원
 python -m unittest discover -s tests                         # 저장소 루트에서 (테스트는 src.nuri_assistant 로 import)
-python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 97개 통과)
+python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 102개 통과)
 python -m pyflakes src tests tools
 pip install -r tools/requirements-frames.txt                 # 프레임 생성 도구용 (앱에는 필요 없음)
 python tools/build_frames.py nuri|sera|yuki|akane|shizuku|hinata|sakura|reika [출력폴더]   # 캐릭터 프레임 재생성
@@ -52,7 +52,7 @@ src/nuri_assistant/
 ├── pricewatch/  sources(네이버 쇼핑 검색 API, 상품 페이지 JSON-LD/메타), store, checker(알림 규칙), tools
 ├── voice/       voicevox(VOICEVOX 호환 HTTP), speaker(번역→합성→재생 스레드, 최신 대사 우선), player
 ├── classic/     기존 파일 이름 정리 도구와 구매 비서 (--classic, 메뉴 "파일 정리 도구"·"파일/구매 비서")
-│                core(스캔·이름 규칙·미리보기·실행·되돌리기), metadata(파일 이름에서 날짜·매체·면 추정),
+│                tools(대화 도구 rename_files·undo_rename, 확인 카드로 실행), core(스캔·이름 규칙·미리보기·실행·되돌리기), metadata(파일 이름에서 날짜·매체·면 추정),
 │                storage(history.sqlite3 이력, profiles.json 작업 프로필), commands(한국어 요청 → 이름 변경 계획),
 │                shopping(구매 체크리스트 점수, 선택 기능인 OpenAI 조사)
 ├── paths.py     사용자 데이터 경로(APP_DIR, companion.json, *.sqlite3, profiles.json, error.log, characters/)와 ASSETS_DIR
@@ -79,7 +79,7 @@ tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창�
 
 ## 설계 원칙 (꼭 지킬 것)
 
-1. **AI는 직접 바꾸지 않는다.** 일정·할 일·가격 알림의 추가·완료·삭제는 도구가 대기 액션만 만들고, 사용자가 확인 카드(버튼 또는 "응"/"아니")로 승인해야 반영됩니다. 예외는 집중 타이머(영구 변경이 없음). 파일 이름 변경은 미리보기 → 확인 → 실행 → 되돌리기 흐름을 유지합니다.
+1. **AI는 직접 바꾸지 않는다.** 일정·할 일·가격 알림의 추가·완료·삭제는 도구가 대기 액션만 만들고, 사용자가 확인 카드(버튼 또는 "응"/"아니")로 승인해야 반영됩니다. 예외는 집중 타이머(영구 변경이 없음). 파일 이름 변경은 미리보기 → 확인 → 실행 → 되돌리기 흐름을 유지합니다(대화로 할 때도 `rename_files`가 미리보기만 만들고 확인 카드 `정리`로 실행, `undo_rename`도 확인 카드).
 2. **날짜 계산은 코드가 한다.** 모델은 사용자 표현("다음 주 화요일 3시", "금요일까지")을 그대로 넘기고 `schedule/timeparse.py`가 해석합니다. 새 표현은 여기에 추가하고 `tests/test_schedule.py`에 사례를 넣습니다.
 3. **가격은 지어내지 않고, 무료 출처만 쓴다.** 누구나 무료로 키를 받는 네이버 쇼핑 검색 API, 또는 상품 페이지의 구조화 데이터만 씁니다. 심사가 필요한 API(쿠팡 파트너스)는 넣지 않고, 자동 조회를 막는 사이트(쿠팡 웹)는 우회해서 긁지 않습니다.
 4. **로컬 우선.** 대화와 번역은 로컬 Ollama, 음성은 로컬 VOICEVOX. API 키는 로컬 설정 파일에만 저장합니다.
@@ -92,7 +92,7 @@ tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창�
 - SQLite는 매 호출마다 연결을 열고 반드시 닫습니다. 저장소의 `_connect()`는 `db.connect(path, rows=...)`를 돌려주기만 합니다. 안 닫으면 Windows에서 파일이 잠깁니다.
 - 사용자 데이터·그림 경로는 `paths.py`에만 적습니다(`Path(__file__).parents[N]`을 다른 곳에 쓰지 않음. 파일을 옮기면 조용히 깨짐). `MascotApp(app_dir)`는 다른 폴더를 받을 수 있으므로 거기서는 파일 이름(`.name`)만 가져다 씁니다.
 - 파일 이동은 `classic.core.operations.move_no_clobber`만 씁니다. `Path.rename`은 macOS/Linux에서 기존 파일을 덮어씁니다.
-- 새 도구 묶음은 `specs`, `execute`, `take_pending`, `owns`, `confirm`을 갖춘 클래스로 만들어(확인 카드가 필요하면 `ConfirmingTools`를 상속하고 `action_type`만 지정) `services.py`의 `ToolBox([...])`에 넣고, 페르소나 시스템 프롬프트(`personas.py`의 `abilities`)에 쓰임새를 한 줄 추가합니다. 확인 카드는 액션의 `kind`(add/done/cancel/delete), `heading`, `when`, `title`만 읽습니다(`companion.toolbox.ConfirmableAction`).
+- 새 도구 묶음은 `specs`, `execute`, `take_pending`, `owns`, `confirm`을 갖춘 클래스로 만들어(확인 카드가 필요하면 `ConfirmingTools`를 상속하고 `action_type`만 지정) `services.py`의 `ToolBox([...])`에 넣고, 페르소나 시스템 프롬프트(`personas.py`의 `abilities`)에 쓰임새를 한 줄 추가합니다. 확인 카드는 액션의 `kind`(add/done/rename/undo는 보라 버튼, cancel/delete는 빨간 버튼, 버튼 글자는 `confirm_card.YES_LABELS`), `heading`, `when`, `title`만 읽습니다(`companion.toolbox.ConfirmableAction`).
 - 앱이 스스로 하는 대사(원칙 5)는 `announcements.py`에서 조립하고 `tests/test_announcements.py`에 사례를 넣습니다. `MascotApp`은 저장소 갱신과 `talk()`/`say()`만 합니다.
 - 캐릭터 창의 시간 값(깜박임, 입 움직임, 표정 복귀, 폴링 주기 등)은 `ui/character/mascot.py` 위쪽 `*_MS` 상수에 모여 있습니다.
 - 테스트용 가짜 클라이언트의 `chat_stream`은 `(model, messages, options=None, tools=None)`을 받아야 합니다.
@@ -150,5 +150,5 @@ tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창�
 ## 남은 일
 
 - 실제 PC(Windows)에서 종합 확인: Ollama 도구 호출, VOICEVOX 음성과 기본 목소리 id, 네이버 API(쿠팡 상품 포함 여부), 투명 배경, 고배율 화면(앱이 DPI 인식을 하지 않아 125%·150%에서 Windows가 창을 늘려 그림이 흐릴 수 있음 — 확인 후 `SetProcessDpiAwareness` 검토), 오른쪽 아래 위치·항상 위 유지
-- 파일 정리 기능을 대화 도구로 연결 (미리보기·확인 카드 재사용)
+- 대화 파일 정리의 다음 단계(원하면): 확인 카드에는 예시 한 개만 보이니 전체 목록 미리보기 창, 파일 이름에서 날짜·매체를 파일마다 읽는 모드(파일 정리 도구의 `infer_metadata` 방식), 실제 Windows 폴더(OneDrive 바탕 화면 등)에서 확인
 - 캐릭터 그림은 8명 모두 완료(2026-10-07). 새 캐릭터를 더 만들 때 시트 생성 프롬프트는 기존 시트를 첨부하고 그림체를 문장으로 고정해야 함(제미나이가 그림체를 잘 못 맞춤, `assets/characters/README.md`. 표정 시트는 새 대화에서 그 캐릭터 기본 시트 한 장만 첨부해야 함(여러 장 붙이면 첨부 이미지를 겹쳐 넣음). 끝까지 겹치면 표정을 한 칸씩 6장 받아 3×2로 이어 붙여 씀)
