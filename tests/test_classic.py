@@ -28,7 +28,8 @@ from src.nuri_assistant import (
     save_profile,
     undo_last_batch,
 )
-from src.nuri_assistant.classic.tools import FileTools, RenameAction, resolve_folder
+from src.nuri_assistant.classic.core import rule_from_korean, rule_pattern, rule_to_korean, validate_rule
+from src.nuri_assistant.classic.tools import FileTools, RenameAction, RenameOptions, resolve_folder
 
 
 class RenameEngineTest(unittest.TestCase):
@@ -330,6 +331,41 @@ class FileToolsTest(unittest.TestCase):
         (self.downloads / "b_scan.pdf").unlink()
         self.assertIn("바꾸지 못했어요", self.tools.confirm(action))
         self.assertEqual(self.names(), ["a_scan.pdf", "memo.txt"])  # the batch was rolled back
+
+    def test_settings_rule_media_and_types(self) -> None:
+        options = RenameOptions(rule="{YEAR}-{MONTH}-{DAY}_{PAGE}", extensions=(".txt",))
+        tools = FileTools(self.history, lambda: options, home=lambda: self.home)
+        result = tools.execute("rename_files", {"folder": "다운로드", "request": "20260715 정리해줘"})
+        self.assertEqual(result["examples"], ["memo.txt → 2026-07-15_001.txt"])  # no media needed, only .txt
+
+        options = RenameOptions(media="ja00")
+        tools = FileTools(self.history, lambda: options, home=lambda: self.home)
+        result = tools.execute("rename_files", {"folder": "다운로드", "request": "20260715 정리해줘"})
+        self.assertEqual(result["examples"][0], "a_scan.pdf → 20260715_ja00_001.pdf")
+
+        options = RenameOptions(rule="{DATE}_{MEDIA}")
+        tools = FileTools(self.history, lambda: options, home=lambda: self.home)
+        self.assertIn("페이지", tools.execute("rename_files", {"folder": "다운로드", "request": "ja00"})["error"])
+
+    def test_skips_named_files_and_numbers_after_them(self) -> None:
+        for page in ("001", "002"):
+            (self.downloads / f"20260715_ja00_{page}.pdf").write_text("x", encoding="utf-8")
+        result = self.tools.execute("rename_files", {"folder": "다운로드", "request": "20260715 ja00"})
+        self.assertEqual(result["already_named"], 2)
+        self.assertEqual(result["examples"], ["a_scan.pdf → 20260715_ja00_003.pdf", "b_scan.pdf → 20260715_ja00_004.pdf"])
+
+        off = FileTools(self.history, lambda: RenameOptions(skip_named=False), home=lambda: self.home)
+        self.assertEqual(off.execute("rename_files", {"folder": "다운로드", "request": "20260715 ja00"})["already_named"], 0)
+
+    def test_rule_tokens(self) -> None:
+        self.assertEqual(rule_from_korean("{날짜}_{매체}_{페이지}"), "{DATE}_{MEDIA}_{PAGE}")
+        self.assertEqual(rule_to_korean("{YEAR}-{MONTH}-{DAY}_p{PAGE}"), "{연도}-{월}-{일}_p{페이지}")
+        self.assertTrue(rule_pattern("{DATE}-{MEDIA}-p{PAGE}").fullmatch("20260715-JA00-p012"))
+        self.assertFalse(rule_pattern("{DATE}_{MEDIA}_{PAGE}").fullmatch("scan_20260715"))
+        for bad in ("{DATE}_{MEDIA}", "{날짜}_{PAGE}", "{DATE}_{PAGE}_{PAGE}x{FOO}"):
+            with self.assertRaises(RenameError):
+                validate_rule(bad)
+        validate_rule(rule_from_korean("{연도}{월}{일}-{페이지}"))
 
     def test_resolve_folder(self) -> None:
         onedrive = self.home / "OneDrive" / "바탕 화면"

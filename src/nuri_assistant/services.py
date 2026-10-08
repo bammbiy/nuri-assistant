@@ -9,13 +9,18 @@ from pathlib import Path
 from typing import Callable
 
 from .classic.storage import HistoryStore
-from .classic.tools import FileTools
+from .classic.tools import FileTools, RenameOptions
 from .companion import CompanionSettings, ConversationStore, ToolBox
 from .focus import FocusTimer, FocusTools
 from .paths import HISTORY_DB, MEMORY_DB
 from .pricewatch import NaverShopping, PriceChecker, PriceTools, WatchStore
 from .schedule import ScheduleStore, ScheduleTools
 from .todo import TodoStore, TodoTools
+
+
+def rename_options(settings: CompanionSettings) -> RenameOptions:
+    return RenameOptions(settings.rename_rule, settings.rename_media,
+                         tuple(settings.rename_extensions) or RenameOptions.extensions, settings.rename_skip_named)
 
 
 def price_sources(settings: CompanionSettings) -> list:
@@ -44,5 +49,5 @@ class Services:
             TodoTools(self.todos),
             PriceTools(self.watches, self.price_checker),
             FocusTools(self.focus_timer),
-            FileTools(self.history),
+            FileTools(self.history, lambda: rename_options(settings())),
         ])

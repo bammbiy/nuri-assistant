@@ -4,6 +4,8 @@ import json
 from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 
+from ..classic.core.models import DEFAULT_RULE
+from ..classic.core.scanner import DEFAULT_EXTENSIONS
 from .llm import DEFAULT_MODEL, DEFAULT_OLLAMA_URL
 from .personas import DEFAULT_PERSONA_ID
 
@@ -29,6 +31,12 @@ class CompanionSettings:
     voice_ids: dict = field(default_factory=dict)  # persona id -> engine style id
     # "bust" (upper body, default) or "full" (full body, taller window).
     display_mode: str = "bust"
+    # File renaming from chat ("파일 정리 설정" window): name rule, default media code, file types,
+    # and whether files already named by the rule are left alone (numbering continues after them).
+    rename_rule: str = DEFAULT_RULE
+    rename_media: str = ""
+    rename_extensions: list = field(default_factory=lambda: list(DEFAULT_EXTENSIONS))
+    rename_skip_named: bool = True
     x: int | None = None
     y: int | None = None
 

@@ -37,6 +37,7 @@ from ..windows.conversation_log import ConversationLogWindow
 from ..windows.price import PriceWindow
 from ..windows.price_settings import PriceSettingsWindow
 from ..windows.rename_preview import RenamePreviewWindow
+from ..windows.rename_settings import RenameSettingsWindow
 from ..windows.schedule import ScheduleWindow
 from ..windows.todo import TodoWindow
 from ..windows.voice_settings import VoiceSettingsWindow
@@ -264,6 +265,7 @@ class MascotApp(tk.Tk):
         self.menu.add_command(label="이 캐릭터의 기억 지우기", command=self.clear_memory)
         self.menu.add_separator()
         self.menu.add_command(label="파일 정리 도구", command=lambda: NuriAssistantApp(self, history=self.history))
+        self.menu.add_command(label="파일 정리 설정…", command=lambda: RenameSettingsWindow(self, self.settings, self._update_settings))
         self.menu.add_command(label="파일/구매 비서", command=lambda: AssistantWindow(self, self.history))
         self.menu.add_separator()
         self.menu.add_command(label="종료", command=self.quit_app)

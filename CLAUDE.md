@@ -22,7 +22,7 @@ python src/run_nuri.py --classic  # 파일 정리 도구만
 python -m nuri_assistant [--classic]   # 같은 실행 (src/ 안에서, 또는 pip install -e . 뒤 어디서나. 설치하면 nuri-assistant 명령도 생김)
 pip install -e .[dev]             # 선택: 개발용 설치(pyflakes). 그림이 assets/에 있어서 편집 설치(-e)만 지원
 python -m unittest discover -s tests                         # 저장소 루트에서 (테스트는 src.nuri_assistant 로 import)
-python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 102개 통과)
+python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 105개 통과)
 python -m pyflakes src tests tools
 pip install -r tools/requirements-frames.txt                 # 프레임 생성 도구용 (앱에는 필요 없음)
 python tools/build_frames.py nuri|sera|yuki|akane|shizuku|hinata|sakura|reika [출력폴더]   # 캐릭터 프레임 재생성
@@ -67,6 +67,7 @@ src/nuri_assistant/
     │               picker(비서 선택), placeholder(그림 없는 캐릭터)
     ├── windows/    메뉴에서 여는 파스텔 창: schedule, todo, price(최저가), price_settings, voice_settings,
     │               conversation_log(대화 기록), rename_preview(대화 파일 정리의 전체 목록, 확인 카드 "목록" 버튼),
+    │               rename_settings(파일 정리 설정: 이름 형식·기본 매체코드·파일 종류·정리된 파일 건너뛰기),
     │               cards(카드 목록 창 공용: 두 번 눌러 삭제, 휠 스크롤)
     └── classic/    desktop(파일 정리 도구), assistant(옛 파일/구매 비서 창)
 tests/           test_<영역>.py (classic, companion, schedule, pricewatch, todo_focus_voice, announcements, services, entry, screen)
@@ -108,6 +109,7 @@ tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창�
 - 백그라운드 작업(모델 호출, 가격 조회, 음성 합성)은 스레드에서 돌리고 결과는 `MascotApp.events` 큐에 `("종류", 값...)`으로 넘깁니다. 새 종류는 `_handle_event`의 표에 `_on_<종류>` 메서드로 추가합니다. 스레드에서 Tk 위젯을 직접 만지지 않습니다.
 - 말풍선과 음성을 함께 낼 때는 `MascotApp.talk()`, 말풍선만이면 `say()`. 오류·안내 문구는 읽지 않습니다.
 - 모델 답변의 일본어 음성 대사는 `<ja>…</ja>`로 받고 `ReplyParser.voice`에 담깁니다(말풍선과 대화 기억에는 남기지 않음).
+- 파일 이름 규칙은 내부적으로 `{DATE}`·`{YEAR}`·`{MONTH}`·`{DAY}`·`{MEDIA}`·`{PAGE}`(설정 창에는 `{날짜}`·`{연도}`·`{월}`·`{일}`·`{매체}`·`{페이지}`, 변환은 `classic.core.naming`의 `rule_from_korean`/`rule_to_korean`). `{PAGE}`는 필수(`validate_rule`), `{MEDIA}`가 없으면 매체코드를 묻지 않습니다. 대화 도구는 `CompanionSettings.rename_*`를 `services.rename_options()`로 받아 매번 읽으므로 설정을 바꾸면 바로 적용됩니다. 요청 문장에 규칙을 말하면("매체-날짜 순") 그쪽이 우선.
 - 설정 항목을 추가할 때는 `CompanionSettings`에 기본값과 함께 넣습니다. 알 수 없는 키는 로드 시 무시되므로 옛 설정 파일도 열립니다.
 
 ## UI 관례
@@ -154,5 +156,5 @@ tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창�
 ## 남은 일
 
 - 실제 PC(Windows)에서 종합 확인: Ollama 도구 호출, VOICEVOX 음성과 기본 목소리 id, 네이버 API(쿠팡 상품 포함 여부), 투명 배경, 고배율 화면(앱이 DPI 인식을 하지 않아 125%·150%에서 Windows가 창을 늘려 그림이 흐릴 수 있음 — 확인 후 `SetProcessDpiAwareness` 검토), 오른쪽 아래 위치·항상 위 유지
-- 대화 파일 정리의 다음 단계(원하면): 이미 규칙대로 된 파일(예: 20260715_ja00_006.pdf)이 섞인 폴더에서는 그 파일도 번호가 다시 매겨지고 자리를 뺏긴 파일은 "겹침"으로 남음(파일 정리 도구와 같은 동작, 미리보기 창에서 보임) — 규칙에 맞는 파일은 건너뛰는 옵션 검토, 파일 이름에서 날짜·매체를 파일마다 읽는 모드(파일 정리 도구의 `infer_metadata` 방식), 실제 Windows 폴더(OneDrive 바탕 화면 등)에서 확인
+- 대화 파일 정리의 다음 단계(원하면): 파일 이름에서 날짜·매체를 파일마다 읽는 모드(파일 정리 도구의 `infer_metadata` 방식), 실제 Windows 폴더(OneDrive 바탕 화면 등)에서 확인
 - 캐릭터 그림은 8명 모두 완료(2026-10-07). 새 캐릭터를 더 만들 때 시트 생성 프롬프트는 기존 시트를 첨부하고 그림체를 문장으로 고정해야 함(제미나이가 그림체를 잘 못 맞춤, `assets/characters/README.md`. 표정 시트는 새 대화에서 그 캐릭터 기본 시트 한 장만 첨부해야 함(여러 장 붙이면 첨부 이미지를 겹쳐 넣음). 끝까지 겹치면 표정을 한 칸씩 6장 받아 3×2로 이어 붙여 씀)

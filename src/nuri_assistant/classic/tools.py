@@ -12,7 +12,10 @@ from typing import Any, Callable
 
 from ..companion.toolbox import ConfirmingTools, clean_args, unknown_tool
 from .commands import interpret_file_command
-from .core import RenameError, RenameInput, RenamePreview, apply_batch_rename, preview_batch, scan_files, undo_last_batch
+from .core import (
+    DEFAULT_EXTENSIONS, DEFAULT_RULE, RenameError, RenameInput, RenamePreview, apply_batch_rename, build_file_name,
+    preview_batch, rule_pattern, rule_uses_media, scan_files, undo_last_batch, validate_rule,
+)
 from .storage import HistoryStore
 
 MAX_FILES = 300  # more than this in one folder is likely the wrong folder; ask for a narrower one
@@ -57,6 +60,16 @@ TOOL_SPECS: list[dict[str, Any]] = [
         },
     },
 ]
+
+
+@dataclass(frozen=True)
+class RenameOptions:
+    """The user's choices from the "파일 정리 설정" window (CompanionSettings.rename_*)."""
+
+    rule: str = DEFAULT_RULE
+    media: str = ""  # used when the request names no media code
+    extensions: tuple[str, ...] = DEFAULT_EXTENSIONS
+    skip_named: bool = True  # leave files already named by the rule and number after them
 
 
 @dataclass(frozen=True)
@@ -110,9 +123,11 @@ class FileTools(ConfirmingTools[RenameAction]):
     specs = TOOL_SPECS
     action_type = RenameAction
 
-    def __init__(self, history: HistoryStore, home: Callable[[], Path] = Path.home) -> None:
+    def __init__(self, history: HistoryStore, options: Callable[[], RenameOptions] = RenameOptions,
+                 home: Callable[[], Path] = Path.home) -> None:
         super().__init__()
         self.history = history
+        self.options = options
         self.home = home
 
     def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -132,21 +147,30 @@ class FileTools(ConfirmingTools[RenameAction]):
         folder = resolve_folder(folder_text, self.home())
         if folder is None:
             return {"ok": False, "error": f"'{folder_text}' 폴더를 찾지 못했어요.", "hint": "폴더 전체 경로를 물어본다."}
+        options = self.options()
         plan = interpret_file_command(request)
-        if plan.needs_media:
+        # A rule said in the request ("매체-날짜 순으로") wins over the one saved in settings.
+        rule = plan.rule if plan.rule != DEFAULT_RULE else options.rule
+        try:
+            validate_rule(rule)
+        except RenameError as exc:
+            return {"ok": False, "error": f"파일 정리 설정의 이름 형식이 잘못됐어요. {exc}"}
+        media = plan.media or options.media
+        if rule_uses_media(rule) and not media:
             return {"ok": False, "error": "매체코드가 필요해요.", "hint": "ja00처럼 영문 2자+숫자 2자 매체코드를 물어본다."}
         try:
-            paths = scan_files(folder, recursive=plan.recursive)
+            paths = scan_files(folder, recursive=plan.recursive, extensions=options.extensions)
         except OSError as exc:
             return {"ok": False, "error": str(exc)}
+        named = rule_pattern(rule)
+        done = [path for path in paths if options.skip_named and named.fullmatch(path.stem)]
+        paths = [path for path in paths if path not in done]
         if not paths:
-            return {"ok": False, "error": f"'{folder_label(folder)}'에 정리할 문서·이미지 파일이 없어요."}
+            reason = f" (이미 정리된 파일 {len(done)}개)" if done else ""
+            return {"ok": False, "error": f"'{folder_label(folder)}'에 정리할 파일이 없어요{reason}."}
         if len(paths) > MAX_FILES:
             return {"ok": False, "error": f"파일이 {len(paths)}개나 돼요.", "hint": "더 좁은 폴더를 물어본다."}
-        start = int(plan.page)
-        previews = preview_batch(
-            RenameInput(path, plan.date, plan.media, str(start + index).zfill(3), plan.rule) for index, path in enumerate(paths)
-        )
+        previews = preview_batch(self._numbered(paths, plan.date, media, int(plan.page), rule))
         ready = [p for p in previews if p.status == "ready"]
         problems = [f"{p.source.name}: {p.message}" for p in previews if p.status in ("conflict", "error")]
         if not ready:
@@ -156,12 +180,30 @@ class FileTools(ConfirmingTools[RenameAction]):
             "ok": True,
             "status": "사용자 확인 대기 중 (아직 바꾸지 않음)",
             "folder": str(folder),
-            "rule": plan.rule,
             "count": len(ready),
             "examples": [f"{p.source.name} → {p.target.name}" for p in ready[:EXAMPLES]],
+            "already_named": len(done),
             "skipped": len(previews) - len(ready),
             "problems": problems[:EXAMPLES],
         }
+
+    @staticmethod
+    def _numbered(paths: list[Path], date: str, media: str, start: int, rule: str) -> list[RenameInput]:
+        """Pages count up from start, stepping over names already in the folder (001-005 done -> 006)."""
+
+        items, page = [], start
+        for path in paths:
+            while True:
+                item = RenameInput(path, date, media, str(page).zfill(3), rule)
+                page += 1
+                try:
+                    taken = path.with_name(build_file_name(item)).exists()
+                except (RenameError, ValueError):
+                    taken = False  # preview_batch reports the error on this file
+                if not taken:
+                    break
+            items.append(item)
+        return items
 
     def confirm(self, action: RenameAction) -> str:
         try:
