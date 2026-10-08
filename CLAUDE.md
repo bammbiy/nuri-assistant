@@ -73,9 +73,12 @@ assets/characters/<id>/        상반신 프레임 405×344 + 원본 시트 2장
 assets/characters/<id>/full/   전신 프레임 405×480
 tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터별 좌표는 CHARACTERS 설정, 의존성은 tools/requirements-frames.txt)
 tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창의 검은 테두리 방지, 여러 번 돌려도 같음)
+.claude/agents/searcher.md     읽기 전용 검색 서브 에이전트 (model: haiku)
 ```
 
 사용자 데이터(`~/.nuri-assistant/`): `companion.json`(설정·네이버 API 키, 못 읽으면 `.bak`로 보존), `error.log`(예외 기록), `companion.sqlite3`(대화·일정·할 일·가격 감시), `history.sqlite3`(파일 이름 변경 이력), `profiles.json`(파일 정리 도구의 작업 프로필), `characters/<id>/`(개인 캐릭터 이미지, 저장소보다 우선).
+
+**AI 에이전트 작업 분담(사용자 지시):** 코드 검색·여러 파일 훑어보기는 메인 모델이 직접 하지 말고 `searcher` 서브 에이전트(`.claude/agents/searcher.md`, Haiku)에 맡깁니다. 파일 수정, 설계·판단, 캐릭터 좌표 측정·표정 검수는 메인 모델이 합니다. 새 세션부터 에이전트 목록에 나타나며, 그 전에는 서브 에이전트를 띄울 때 모델을 haiku로 지정합니다.
 
 ## 설계 원칙 (꼭 지킬 것)
 
