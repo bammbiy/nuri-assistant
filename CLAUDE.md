@@ -66,7 +66,8 @@ src/nuri_assistant/
     │               art(프레임 찾기·캐시), speech_bubble(말풍선), timer_badge(타이머 배지), chatbox, confirm_card,
     │               picker(비서 선택), placeholder(그림 없는 캐릭터)
     ├── windows/    메뉴에서 여는 파스텔 창: schedule, todo, price(최저가), price_settings, voice_settings,
-    │               conversation_log(대화 기록), cards(카드 목록 창 공용: 두 번 눌러 삭제, 휠 스크롤)
+    │               conversation_log(대화 기록), rename_preview(대화 파일 정리의 전체 목록, 확인 카드 "목록" 버튼),
+    │               cards(카드 목록 창 공용: 두 번 눌러 삭제, 휠 스크롤)
     └── classic/    desktop(파일 정리 도구), assistant(옛 파일/구매 비서 창)
 tests/           test_<영역>.py (classic, companion, schedule, pricewatch, todo_focus_voice, announcements, services, entry, screen)
 assets/characters/<id>/        상반신 프레임 405×344 + 원본 시트 2장 (reference_sheet, reference_expressions)
@@ -82,7 +83,7 @@ tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창�
 
 ## 설계 원칙 (꼭 지킬 것)
 
-1. **AI는 직접 바꾸지 않는다.** 일정·할 일·가격 알림의 추가·완료·삭제는 도구가 대기 액션만 만들고, 사용자가 확인 카드(버튼 또는 "응"/"아니")로 승인해야 반영됩니다. 예외는 집중 타이머(영구 변경이 없음). 파일 이름 변경은 미리보기 → 확인 → 실행 → 되돌리기 흐름을 유지합니다(대화로 할 때도 `rename_files`가 미리보기만 만들고 확인 카드 `정리`로 실행, `undo_rename`도 확인 카드).
+1. **AI는 직접 바꾸지 않는다.** 일정·할 일·가격 알림의 추가·완료·삭제는 도구가 대기 액션만 만들고, 사용자가 확인 카드(버튼 또는 "응"/"아니")로 승인해야 반영됩니다. 예외는 집중 타이머(영구 변경이 없음). 파일 이름 변경은 미리보기 → 확인 → 실행 → 되돌리기 흐름을 유지합니다(대화로 할 때도 `rename_files`가 미리보기만 만들고 확인 카드 `정리`로 실행, 카드의 `목록`이 전체 미리보기 창, `undo_rename`도 확인 카드).
 2. **날짜 계산은 코드가 한다.** 모델은 사용자 표현("다음 주 화요일 3시", "금요일까지")을 그대로 넘기고 `schedule/timeparse.py`가 해석합니다. 새 표현은 여기에 추가하고 `tests/test_schedule.py`에 사례를 넣습니다.
 3. **가격은 지어내지 않고, 무료 출처만 쓴다.** 누구나 무료로 키를 받는 네이버 쇼핑 검색 API, 또는 상품 페이지의 구조화 데이터만 씁니다. 심사가 필요한 API(쿠팡 파트너스)는 넣지 않고, 자동 조회를 막는 사이트(쿠팡 웹)는 우회해서 긁지 않습니다.
 4. **로컬 우선.** 대화와 번역은 로컬 Ollama, 음성은 로컬 VOICEVOX. API 키는 로컬 설정 파일에만 저장합니다.
@@ -153,5 +154,5 @@ tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창�
 ## 남은 일
 
 - 실제 PC(Windows)에서 종합 확인: Ollama 도구 호출, VOICEVOX 음성과 기본 목소리 id, 네이버 API(쿠팡 상품 포함 여부), 투명 배경, 고배율 화면(앱이 DPI 인식을 하지 않아 125%·150%에서 Windows가 창을 늘려 그림이 흐릴 수 있음 — 확인 후 `SetProcessDpiAwareness` 검토), 오른쪽 아래 위치·항상 위 유지
-- 대화 파일 정리의 다음 단계(원하면): 확인 카드에는 예시 한 개만 보이니 전체 목록 미리보기 창, 파일 이름에서 날짜·매체를 파일마다 읽는 모드(파일 정리 도구의 `infer_metadata` 방식), 실제 Windows 폴더(OneDrive 바탕 화면 등)에서 확인
+- 대화 파일 정리의 다음 단계(원하면): 이미 규칙대로 된 파일(예: 20260715_ja00_006.pdf)이 섞인 폴더에서는 그 파일도 번호가 다시 매겨지고 자리를 뺏긴 파일은 "겹침"으로 남음(파일 정리 도구와 같은 동작, 미리보기 창에서 보임) — 규칙에 맞는 파일은 건너뛰는 옵션 검토, 파일 이름에서 날짜·매체를 파일마다 읽는 모드(파일 정리 도구의 `infer_metadata` 방식), 실제 Windows 폴더(OneDrive 바탕 화면 등)에서 확인
 - 캐릭터 그림은 8명 모두 완료(2026-10-07). 새 캐릭터를 더 만들 때 시트 생성 프롬프트는 기존 시트를 첨부하고 그림체를 문장으로 고정해야 함(제미나이가 그림체를 잘 못 맞춤, `assets/characters/README.md`. 표정 시트는 새 대화에서 그 캐릭터 기본 시트 한 장만 첨부해야 함(여러 장 붙이면 첨부 이미지를 겹쳐 넣음). 끝까지 겹치면 표정을 한 칸씩 6장 받아 3×2로 이어 붙여 씀)

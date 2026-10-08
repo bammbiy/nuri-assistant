@@ -36,6 +36,7 @@ from ..classic.desktop import NuriAssistantApp
 from ..windows.conversation_log import ConversationLogWindow
 from ..windows.price import PriceWindow
 from ..windows.price_settings import PriceSettingsWindow
+from ..windows.rename_preview import RenamePreviewWindow
 from ..windows.schedule import ScheduleWindow
 from ..windows.todo import TodoWindow
 from ..windows.voice_settings import VoiceSettingsWindow
@@ -120,6 +121,7 @@ class MascotApp(tk.Tk):
         self._voice_error_shown = False
         self._price_checking = False
         self.pending_actions: list[ConfirmableAction] = []
+        self._preview_window: RenamePreviewWindow | None = None
         self.art = CharacterArt(self, app_dir / USER_CHARACTERS.name, ASSETS_DIR, hard_edges=sys.platform == "win32")
         self.events: queue.Queue[tuple] = queue.Queue()
         self.companion = self._make_companion()
@@ -589,13 +591,25 @@ class MascotApp(tk.Tk):
         if not self.pending_actions:
             self.card.hide()
             return
-        self.card.show(self.pending_actions[0], lambda: self._resolve_card(True), lambda: self._resolve_card(False))
+        action = self.pending_actions[0]
+        details = (lambda: self.open_rename_preview(action)) if isinstance(action, RenameAction) and action.previews else None
+        self.card.show(action, lambda: self._resolve_card(True), lambda: self._resolve_card(False), details)
+
+    def open_rename_preview(self, action: RenameAction) -> None:
+        """Full old -> new list for the rename on the card; its buttons answer the same card."""
+
+        if self._preview_window is not None and self._preview_window.winfo_exists():
+            self._preview_window.destroy()
+        self._preview_window = RenamePreviewWindow(self, action, lambda: self._resolve_card(True), lambda: self._resolve_card(False))
 
     def _resolve_card(self, approved: bool) -> None:
         if not self.pending_actions:
             self.card.hide()
             return
         action = self.pending_actions.pop(0)
+        if self._preview_window is not None and self._preview_window.winfo_exists():
+            self._preview_window.destroy()  # answered from the card or by typing; the list is stale now
+        self._preview_window = None
         if approved:
             message = self.toolbox.confirm(action)
             self.companion.note(message)

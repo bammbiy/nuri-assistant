@@ -27,7 +27,10 @@ class ConfirmCard:
     def visible(self) -> bool:
         return self.action is not None
 
-    def show(self, action: ConfirmableAction, on_yes: Callable[[], None], on_no: Callable[[], None]) -> None:
+    def show(self, action: ConfirmableAction, on_yes: Callable[[], None], on_no: Callable[[], None],
+             on_details: Callable[[], None] | None = None) -> None:
+        """on_details adds a "목록" button (file renames: the card shows one example of many)."""
+
         self.hide()
         self.action = action
         canvas, x1, y1 = self.canvas, self.left, self.top
@@ -44,6 +47,8 @@ class ConfirmCard:
         yes_color, yes_hover = (ACCENT, ACCENT_DARK) if adding else (DANGER, DANGER_HOVER)
         self._button(x2 - 76, y2 - 32, 64, YES_LABELS.get(action.kind, "삭제"), yes_color, yes_hover, "#ffffff", "confirm_yes", on_yes)
         self._button(x2 - 146, y2 - 32, 64, "취소", SOFT, SOFT_HOVER, TEXT, "confirm_no", on_no)
+        if on_details is not None:
+            self._button(x2 - 216, y2 - 32, 64, "목록", SOFT, SOFT_HOVER, TEXT, "confirm_details", on_details)
         canvas.tag_raise(TAG)
 
     def hide(self) -> None:
