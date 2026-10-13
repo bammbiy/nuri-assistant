@@ -75,12 +75,17 @@ assets/characters/<id>/        상반신 프레임 405×344 + 원본 시트 2장
 assets/characters/<id>/full/   전신 프레임 405×480
 tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터별 좌표는 CHARACTERS 설정, 의존성은 tools/requirements-frames.txt)
 tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창의 검은 테두리 방지, 여러 번 돌려도 같음)
-.claude/agents/searcher.md     읽기 전용 검색 서브 에이전트 (model: haiku)
+.claude/agents/                서브 에이전트: searcher(Haiku, 검색), worker(Sonnet, 구현), reviewer(Sonnet, 검토)
 ```
 
 사용자 데이터(`~/.nuri-assistant/`): `companion.json`(설정·네이버 API 키, 못 읽으면 `.bak`로 보존), `error.log`(예외 기록), `companion.sqlite3`(대화·일정·할 일·가격 감시), `history.sqlite3`(파일 이름 변경 이력), `profiles.json`(파일 정리 도구의 작업 프로필), `characters/<id>/`(개인 캐릭터 이미지, 저장소보다 우선).
 
-**AI 에이전트 작업 분담(사용자 지시):** 코드 검색·여러 파일 훑어보기는 메인 모델이 직접 하지 말고 `searcher` 서브 에이전트(`.claude/agents/searcher.md`, Haiku)에 맡깁니다. 파일 수정, 설계·판단, 캐릭터 좌표 측정·표정 검수는 메인 모델이 합니다. 새 세션부터 에이전트 목록에 나타나며, 그 전에는 서브 에이전트를 띄울 때 모델을 haiku로 지정합니다.
+**AI 에이전트 작업 분담(사용자 지시):** 최종 판단은 메인 모델(Opus)이 하고, 일은 서브 에이전트에 나눕니다(`.claude/agents/`).
+- `searcher`(Haiku, 읽기만): 코드 검색·여러 파일 훑어보기. 메인 모델은 직접 넓게 검색하지 않습니다.
+- `worker`(Sonnet): 메인 모델이 무엇을 어떻게 바꿀지 정해 준 구현(함수 추가·수정, 테스트 작성, 정해진 규칙대로 여러 파일 고치기, 실패 테스트 고치기). 커밋·푸시·CLAUDE.md·HISTORY.md는 하지 않음.
+- `reviewer`(Sonnet, 읽기만): 커밋 전 변경 검토(원칙 위반·버그·빠진 테스트). 지적만 하고 반영 여부는 메인 모델이 정함.
+- 메인 모델 몫: 설계·범위 결정, 사용자와의 대화, 캐릭터 좌표 측정·표정 검수 같은 눈으로 판단하는 일, 서브 에이전트 결과 확인(테스트를 직접 다시 돌려 봄), 문서 갱신, 커밋·푸시.
+- 서브 에이전트 보고는 그대로 믿지 않고 메인 모델이 diff와 테스트로 확인한 뒤 반영합니다.
 
 ## 설계 원칙 (꼭 지킬 것)
 
