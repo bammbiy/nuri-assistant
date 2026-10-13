@@ -10,6 +10,7 @@ from datetime import date, datetime
 from typing import TYPE_CHECKING
 
 from .pricewatch.checker import won
+from .routine import duration_text
 
 if TYPE_CHECKING:
     from .companion.personas import Persona
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
 
 BRIEFING_MAX_EVENTS = 4
 BRIEFING_MAX_TODOS = 3
+WRAPUP_MAX_DONE = 3
 
 
 def until_text(event: Event, now: datetime) -> str:
@@ -82,3 +84,46 @@ def timer_line(persona: Persona, timer: FocusTimer, event: str) -> tuple[str, st
 def price_alert_line(persona: Persona, result: CheckResult) -> str:
     offer = result.offer  # callers announce only results that have an offer
     return persona.price_alert.format(title=result.watch.label, price=won(offer.price), mall=offer.mall)
+
+
+def presence_line(persona: Persona, kind: str, minutes: int) -> tuple[str, str]:
+    """(text, expression) for a presence event: "welcome_back", "break" or "water"."""
+
+    if kind == "welcome_back":
+        return persona.welcome_back.format(minutes=duration_text(minutes)), "happy"
+    if kind == "break":
+        return persona.take_break.format(minutes=duration_text(minutes)), "thinking"
+    return persona.drink_water, "neutral"
+
+
+def with_weather(briefing: tuple[str, str] | None, weather: str | None) -> tuple[str, str] | None:
+    """Append the weather line to the briefing; weather alone still makes a briefing."""
+
+    if not weather:
+        return briefing
+    if briefing is None:
+        return weather, weather
+    text, headline = briefing
+    return f"{text}\n{weather}", f"{headline} {weather}"
+
+
+def compose_wrapup(persona: Persona, focus: tuple[int, int], done: list[Todo], tomorrow: list[Event]) -> tuple[str, str]:
+    """(bubble text, spoken headline) for the evening wrap-up: focus blocks, finished to-dos, tomorrow."""
+
+    count, minutes = focus
+    parts = [persona.wrapup]
+    if count:
+        parts.append(f"· 집중 {count}번, {duration_text(minutes)}")
+    if done:
+        names = ", ".join(todo.title for todo in done[:WRAPUP_MAX_DONE])
+        more = f" 외 {len(done) - WRAPUP_MAX_DONE}개" if len(done) > WRAPUP_MAX_DONE else ""
+        parts.append(f"· 끝낸 일 {len(done)}개: {names}{more}")
+    if not count and not done:
+        parts.append("· 오늘은 기록된 집중이나 끝낸 일이 없어요.")
+    if tomorrow:
+        first = tomorrow[0]
+        when = "하루 종일" if first.all_day else first.start.strftime("%H:%M")
+        parts.append(f"· 내일 첫 일정: {when} {first.title}" + (f" (총 {len(tomorrow)}개)" if len(tomorrow) > 1 else ""))
+    else:
+        parts.append("· 내일은 일정이 없어요.")
+    return "\n".join(parts), persona.wrapup

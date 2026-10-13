@@ -11,7 +11,7 @@ from typing import Callable
 from .classic.storage import HistoryStore
 from .classic.tools import FileTools, RenameOptions
 from .companion import CompanionSettings, ConversationStore, ToolBox
-from .focus import FocusTimer, FocusTools
+from .focus import FocusLog, FocusTimer, FocusTools
 from .paths import HISTORY_DB, MEMORY_DB
 from .pricewatch import NaverShopping, PriceChecker, PriceTools, WatchStore
 from .schedule import ScheduleStore, ScheduleTools
@@ -61,6 +61,7 @@ class Services:
         self.price_checker = PriceChecker(self.watches, self.price_sources)
         self.todos = TodoStore(db)
         self.focus_timer = FocusTimer()
+        self.focus_log = FocusLog(db)
         self.history = HistoryStore(app_dir / HISTORY_DB.name)
         self.toolbox = ToolBox([
             ScheduleTools(self.schedule),

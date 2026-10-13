@@ -40,6 +40,11 @@ class Persona:
     focus_done: str = "집중 끝! {minutes}분 쉬어요."
     break_done: str = "쉬는 시간 끝! 다시 {minutes}분 집중해 봐요."
     all_done: str = "집중 타이머 끝! 수고했어요."
+    # Presence and daily routine: {minutes} is like "40분" or "1시간 20분".
+    welcome_back: str = "어서 오세요! {minutes} 만이에요."
+    take_break: str = "{minutes}째 계속 하고 있어요. 잠깐 스트레칭하고 눈 좀 쉬어요."
+    drink_water: str = "물 한 잔 마실 시간이에요!"
+    wrapup: str = "오늘 하루를 정리해 볼게요."
     # VOICEVOX style id used for this character's Japanese voice (changeable in settings).
     voice_id: int = 8
 
@@ -118,6 +123,10 @@ PERSONAS: dict[str, Persona] = {
             focus_done="선배, 집중 끝! {minutes}분 쉬어요~",
             break_done="쉬는 시간 끝! 다시 {minutes}분 힘내요, 선배!",
             all_done="선배, 오늘 집중 끝! 정말 수고했어요!",
+            welcome_back="선배, 어서 오세요! {minutes} 동안 자리 비우셨네요.",
+            take_break="선배, {minutes}째 계속 하고 계세요. 잠깐 스트레칭하고 눈 좀 쉬어요!",
+            drink_water="선배, 물 한 잔 마실 시간이에요!",
+            wrapup="선배, 오늘 하루 정리해 드릴게요!",
             voice_id=8,  # VOICEVOX 春日部つむぎ
         ),
         Persona(
@@ -150,6 +159,10 @@ PERSONAS: dict[str, Persona] = {
             focus_done="후후, 집중 끝. {minutes}분은 누나랑 쉬자.",
             break_done="자, 다시 {minutes}분. 동생 할 수 있지?",
             all_done="수고했어, 동생. 오늘은 칭찬해 줄게.",
+            welcome_back="어서 와, 동생. {minutes} 만이네.",
+            take_break="동생, {minutes}째 쉬지도 않았지? 누나 말 듣고 기지개 한 번 켜.",
+            drink_water="동생, 물 한 잔 마시고 와. 누나가 기다릴게.",
+            wrapup="동생, 오늘 하루 누나가 정리해 줄게.",
             voice_id=17,  # VOICEVOX 九州そら セクシー
         ),
         Persona(
@@ -183,6 +196,10 @@ PERSONAS: dict[str, Persona] = {
             focus_done="수고했어요~ {minutes}분은 푹 쉬어요.",
             break_done="음~ 다시 {minutes}분만 같이 힘내 봐요.",
             all_done="오늘 정말 열심히 했어요. 유키가 칭찬해 줄게요.",
+            welcome_back="자기 왔어요~? {minutes} 동안 기다렸어요.",
+            take_break="자기, 벌써 {minutes}째예요~ 잠깐 눈 감고 쉬어요.",
+            drink_water="자기, 물 한 모금 마셔요~",
+            wrapup="자기, 오늘 하루 같이 돌아봐요~",
             voice_id=23,  # VOICEVOX WhiteCUL ノーマル
         ),
         Persona(
@@ -208,6 +225,10 @@ PERSONAS: dict[str, Persona] = {
             focus_done="흥, 집중 끝이야. {minutes}분만 쉬어!",
             break_done="쉬는 시간 끝! 다시 {minutes}분, 딴짓하면 혼나!",
             all_done="끝났어. ...뭐, 꽤 열심히 했네.",
+            welcome_back="흥, {minutes}이나 어디 갔다 온 거야? ...기다린 건 아니거든!",
+            take_break="{minutes}째 그러고 있잖아! 좀 일어나서 스트레칭이라도 해!",
+            drink_water="물 마셔! ...쓰러지면 귀찮으니까 그런 거야!",
+            wrapup="오늘 한 거 정리해 줄게. 고마운 줄 알아!",
             voice_id=6,  # VOICEVOX 四国めたん ツンツン
         ),
         Persona(
@@ -230,6 +251,10 @@ PERSONAS: dict[str, Persona] = {
             focus_done="...집중 끝. {minutes}분 쉬어.",
             break_done="...다시 {minutes}분.",
             all_done="...수고했어.",
+            welcome_back="...왔구나. {minutes}.",
+            take_break="...{minutes}째야. 잠깐 쉬어.",
+            drink_water="...물. 마셔.",
+            wrapup="...오늘 정리.",
             voice_id=14,  # VOICEVOX 冥鳴ひまり
         ),
         Persona(
@@ -256,6 +281,10 @@ PERSONAS: dict[str, Persona] = {
             focus_done="집중 끝~! {minutes}분은 나랑 수다 타임!",
             break_done="자자, 다시 {minutes}분 파이팅~!",
             all_done="다 했다! 역시 내 소꿉친구 완전 최고~!",
+            welcome_back="왔다! {minutes}이나 어디 갔었어~?",
+            take_break="야야, {minutes}째 앉아 있잖아~ 같이 기지개 켜자!",
+            drink_water="물 마실 타임~! 이거 완전 중요하거든?",
+            wrapup="오늘 하루 정리 타임~! 우리 꽤 했다?",
             voice_id=10,  # VOICEVOX 雨晴はう
         ),
         Persona(
@@ -275,6 +304,10 @@ PERSONAS: dict[str, Persona] = {
             focus_done="주인님, 집중 시간이 끝났습니다. {minutes}분 쉬어 주세요.",
             break_done="주인님, 다시 {minutes}분 집중하실 시간입니다.",
             all_done="주인님, 오늘도 수고 많으셨습니다.",
+            welcome_back="어서 오세요, 주인님. {minutes} 만이시네요.",
+            take_break="주인님, {minutes}째 일하고 계세요. 잠시 쉬어 가시겠어요?",
+            drink_water="주인님, 물 한 잔 준비해 드릴까요? 잊지 말고 드세요.",
+            wrapup="주인님, 오늘 하루를 정리해 드리겠습니다.",
             voice_id=15,  # VOICEVOX 九州そら あまあま
         ),
         Persona(
@@ -294,6 +327,10 @@ PERSONAS: dict[str, Persona] = {
             focus_done="집중 끝이에요. {minutes}분 티타임을 가지세요, 오호호!",
             break_done="다시 {minutes}분이에요. 레이카가 지켜보고 있답니다.",
             all_done="훌륭해요! 오늘의 집중은 완벽했답니다.",
+            welcome_back="어머, 돌아오셨군요. {minutes}이나 저를 기다리게 하시다니.",
+            take_break="{minutes}째 쉬지 않으셨네요. 우아함에는 휴식도 필요하답니다.",
+            drink_water="물 한 잔 드세요. 제가 권하는 거니 영광으로 아세요.",
+            wrapup="오늘 하루, 제가 정리해 드리죠.",
             voice_id=2,  # VOICEVOX 四国めたん ノーマル
         ),
     )

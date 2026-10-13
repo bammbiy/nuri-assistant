@@ -5,13 +5,16 @@ from datetime import datetime, timedelta
 
 from src.nuri_assistant.announcements import (
     compose_briefing,
+    compose_wrapup,
     nag_line,
+    presence_line,
     price_alert_line,
     reminder_line,
     timer_line,
     until_text,
+    with_weather,
 )
-from src.nuri_assistant.companion import get_persona
+from src.nuri_assistant.companion import PERSONAS, get_persona
 from src.nuri_assistant.companion import parse_confirmation
 from src.nuri_assistant.focus import FocusTimer
 from src.nuri_assistant.pricewatch.checker import CheckResult
@@ -80,6 +83,53 @@ class BriefingTest(unittest.TestCase):
         text, headline = compose_briefing(PERSONA, [], todos, NOW.date())
         self.assertEqual(headline, "오늘 챙겨야 할 일이 있어요.")
         self.assertEqual(text, "오늘 챙겨야 할 일이 있어요.\n할 일: 할일0(오늘), 할일1(오늘), 할일2(오늘) 외 1개")
+
+
+class PresenceTest(unittest.TestCase):
+    def test_lines(self) -> None:
+        self.assertEqual(presence_line(PERSONA, "welcome_back", 80),
+                         (PERSONA.welcome_back.format(minutes="1시간 20분"), "happy"))
+        self.assertEqual(presence_line(PERSONA, "break", 60), (PERSONA.take_break.format(minutes="1시간"), "thinking"))
+        self.assertEqual(presence_line(PERSONA, "water", 0), (PERSONA.drink_water, "neutral"))
+
+    def test_every_persona_has_lines(self) -> None:
+        for persona in PERSONAS.values():
+            self.assertTrue(persona.wrapup.strip(), persona.id)
+            self.assertTrue(persona.drink_water.strip(), persona.id)
+            self.assertIn("{minutes}", persona.welcome_back, persona.id)
+            self.assertIn("{minutes}", persona.take_break, persona.id)
+
+    def test_with_weather(self) -> None:
+        self.assertEqual(with_weather(("a", "b"), None), ("a", "b"))
+        self.assertIsNone(with_weather(None, None))
+        self.assertEqual(with_weather(None, "맑음"), ("맑음", "맑음"))
+        self.assertEqual(with_weather(("본문", "헤드"), "맑음"), ("본문\n맑음", "헤드 맑음"))
+
+
+class WrapupTest(unittest.TestCase):
+    def todos(self, count: int) -> list[Todo]:
+        return [Todo(i, f"일{i}", None, True, True) for i in range(count)]
+
+    def test_full(self) -> None:
+        tomorrow = [event("회의", datetime(2026, 10, 7, 9, 5)), event("저녁", datetime(2026, 10, 7, 19, 0))]
+        text, headline = compose_wrapup(PERSONA, (2, 80), self.todos(5), tomorrow)
+        self.assertEqual(headline, PERSONA.wrapup)
+        self.assertEqual(text.split("\n"), [
+            PERSONA.wrapup,
+            "· 집중 2번, 1시간 20분",
+            "· 끝낸 일 5개: 일0, 일1, 일2 외 2개",
+            "· 내일 첫 일정: 09:05 회의 (총 2개)",
+        ])
+
+    def test_three_done_has_no_more_and_single_all_day_event(self) -> None:
+        tomorrow = [event("휴가", datetime(2026, 10, 7), all_day=True)]
+        text, _ = compose_wrapup(PERSONA, (0, 0), self.todos(3), tomorrow)
+        lines = text.split("\n")
+        self.assertEqual(lines[1:], ["· 끝낸 일 3개: 일0, 일1, 일2", "· 내일 첫 일정: 하루 종일 휴가"])
+
+    def test_nothing(self) -> None:
+        text, _ = compose_wrapup(PERSONA, (0, 0), [], [])
+        self.assertEqual(text.split("\n")[1:], ["· 오늘은 기록된 집중이나 끝낸 일이 없어요.", "· 내일은 일정이 없어요."])
 
 
 class ConfirmationTest(unittest.TestCase):

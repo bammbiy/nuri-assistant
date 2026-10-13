@@ -32,6 +32,7 @@ class FocusTimer:
         self.break_minutes = 5
         self.cycle = 0
         self.cycles = 1
+        self._finished: list[int] = []  # minutes of focus blocks that ended, for the focus log
 
     def start(self, now: datetime, focus_minutes: int = 25, break_minutes: int = 5, cycles: int = 1) -> TimerState:
         with self._lock:
@@ -61,6 +62,8 @@ class FocusTimer:
         with self._lock:
             while self.phase and self.ends_at and now >= self.ends_at:
                 last = self.cycle >= self.cycles
+                if self.phase == "focus":
+                    self._finished.append(self.focus_minutes)
                 if self.phase == "focus" and self.break_minutes:
                     # Every focus block, the last one too, is followed by its break.
                     events.append("focus_done")
@@ -73,3 +76,10 @@ class FocusTimer:
                     self.cycle += 1
                     self.phase, self.ends_at = "focus", self.ends_at + timedelta(minutes=self.focus_minutes)
         return events
+
+    def take_finished(self) -> list[int]:
+        """Minutes of the focus blocks that ended since the last call (each block once)."""
+
+        with self._lock:
+            finished, self._finished = self._finished, []
+        return finished

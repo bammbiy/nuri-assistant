@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.error import URLError
 
 from src.nuri_assistant.companion import Companion, ConversationStore, ReplyParser, get_persona
-from src.nuri_assistant.focus import FocusTimer, FocusTools
+from src.nuri_assistant.focus import FocusLog, FocusTimer, FocusTools
 from src.nuri_assistant.todo import TodoStore, TodoTools
 from src.nuri_assistant.voice import VoiceError, VoiceSpeaker, VoicevoxClient
 
@@ -96,6 +96,60 @@ class FocusTimerTest(unittest.TestCase):
         self.assertEqual(tools.execute("focus_timer_status", {})["remaining"], "50:00")
         self.assertEqual(tools.execute("stop_focus_timer", {})["status"], "멈춤")
         self.assertEqual(tools.take_pending(), [])
+
+
+class FocusFinishedTest(unittest.TestCase):
+    def test_cycles_with_breaks_each_once(self) -> None:
+        timer = FocusTimer()
+        timer.start(NOW, 25, 5, 2)
+        timer.tick(NOW + timedelta(minutes=24))
+        self.assertEqual(timer.take_finished(), [])
+        timer.tick(NOW + timedelta(minutes=25))
+        self.assertEqual(timer.take_finished(), [25])
+        self.assertEqual(timer.take_finished(), [])
+        timer.tick(NOW + timedelta(minutes=60))  # break, second focus and its break all passed
+        self.assertEqual(timer.take_finished(), [25])
+
+    def test_no_break_and_several_cycles_in_one_tick(self) -> None:
+        timer = FocusTimer()
+        timer.start(NOW, 10, 0, 3)
+        timer.tick(NOW + timedelta(minutes=45))
+        self.assertEqual(timer.take_finished(), [10, 10, 10])
+        self.assertIsNone(timer.phase)
+
+    def test_stop_mid_focus_records_nothing(self) -> None:
+        timer = FocusTimer()
+        timer.start(NOW, 25, 5, 1)
+        timer.tick(NOW + timedelta(minutes=10))
+        timer.stop()
+        timer.tick(NOW + timedelta(minutes=60))
+        self.assertEqual(timer.take_finished(), [])
+
+
+class FocusLogAndDoneTest(unittest.TestCase):
+    def test_summary_half_open(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            log = FocusLog(Path(tmp) / "c.sqlite3")
+            day = datetime(2026, 10, 6)
+            self.assertEqual(log.summary(day, day + timedelta(days=1)), (0, 0))
+            log.add(day, 25)  # start is included
+            log.add(day.replace(hour=15), 50)
+            log.add(day + timedelta(days=1), 30)  # end is excluded
+            log.add(day - timedelta(seconds=1), 40)
+            self.assertEqual(log.summary(day, day + timedelta(days=1)), (2, 75))
+
+    def test_done_between(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = TodoStore(Path(tmp) / "c.sqlite3")
+            first, second, third, open_one = (store.add(name) for name in ["a", "b", "c", "d"])
+            stamps = {first.id: "2026-10-06T18:00:00", second.id: "2026-10-06T09:00:00", third.id: "2026-10-07T00:00:00"}
+            for todo_id, stamp in stamps.items():
+                store.set_done(todo_id)
+                with store._connect() as conn:
+                    conn.execute("UPDATE todos SET done_at = ? WHERE id = ?", (stamp, todo_id))
+            result = store.done_between(datetime(2026, 10, 6), datetime(2026, 10, 7))
+            self.assertEqual([t.title for t in result], ["b", "a"])
+            self.assertNotIn(open_one.id, [t.id for t in result])
 
 
 class FakeResponse(io.BytesIO):

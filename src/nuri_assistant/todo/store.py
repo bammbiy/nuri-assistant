@@ -95,6 +95,16 @@ class TodoStore:
             rows = conn.execute("SELECT * FROM todos WHERE done = 1 ORDER BY done_at DESC LIMIT ?", (limit,)).fetchall()
         return [self._todo(row) for row in rows]
 
+    def done_between(self, start: datetime, end: datetime) -> list[Todo]:
+        """To-dos finished in [start, end), oldest first (the evening wrap-up)."""
+
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM todos WHERE done = 1 AND done_at >= ? AND done_at < ? ORDER BY done_at, id",
+                (start.isoformat(timespec="seconds"), end.isoformat(timespec="seconds")),
+            ).fetchall()
+        return [self._todo(row) for row in rows]
+
     def set_done(self, todo_id: int, done: bool = True) -> bool:
         with self._connect() as conn:
             return conn.execute(

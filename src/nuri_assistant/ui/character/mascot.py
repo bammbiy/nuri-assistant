@@ -12,7 +12,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import messagebox, simpledialog
 
-from ...announcements import compose_briefing, nag_line, price_alert_line, reminder_line, timer_line
+from ...announcements import (
+    compose_briefing, compose_wrapup, nag_line, presence_line, price_alert_line, reminder_line, timer_line, with_weather,
+)
 from ...classic.tools import RenameAction
 from ...companion import (
     EXPRESSIONS,
@@ -27,10 +29,13 @@ from ...companion import (
 )
 from ...crashlog import log_exception
 from ...paths import APP_DIR, ASSETS_DIR, SETTINGS_PATH, USER_CHARACTERS
+from ...presence import PresenceTracker, idle_seconds
 from ...pricewatch import CheckResult, WatchAction
+from ...routine import daily_due, parse_clock
 from ...screen import Rect, all_monitors, default_position, is_reachable, work_area
 from ...services import Services
 from ...voice import VoiceSpeaker, VoicevoxClient
+from ...weather import Place, WeatherError, fetch_today, weather_line
 from ..classic.assistant import AssistantWindow
 from ..classic.desktop import NuriAssistantApp
 from ..windows.conversation_log import ConversationLogWindow
@@ -38,6 +43,7 @@ from ..windows.price import PriceWindow
 from ..windows.price_settings import PriceSettingsWindow
 from ..windows.rename_preview import RenamePreviewWindow
 from ..windows.rename_settings import RenameSettingsWindow
+from ..windows.routine_settings import RoutineSettingsWindow
 from ..windows.schedule import ScheduleWindow
 from ..windows.todo import TodoWindow
 from ..windows.voice_settings import VoiceSettingsWindow
@@ -73,6 +79,10 @@ FIRST_PRICE_CHECK_MS = 30_000
 MIN_PRICE_CHECK_MINUTES = 10
 PRICE_ALERT_GAP_MS = 9000
 BRIEFING_DELAY_MS = 4500
+PRESENCE_POLL_MS = 30_000  # idle time is checked this often (Windows only)
+ROUTINE_POLL_MS = 30_000   # scheduled briefing / evening wrap-up check
+SECOND_LINE_GAP_MS = 9000  # when two presence lines are due at once
+WRAPUP_WINDOW = timedelta(hours=3)  # an app started later than this after the wrap-up time skips it
 FIRST_BLINK_MS = 3500
 BLINK_MS = 140
 BLINK_GAP_MS = (2500, 6000)
@@ -108,6 +118,7 @@ class MascotApp(tk.Tk):
         self.store, self.schedule, self.todos = services.store, services.schedule, services.todos
         self.watches, self.price_checker = services.watches, services.price_checker
         self.focus_timer, self.toolbox, self.history = services.focus_timer, services.toolbox, services.history
+        self.focus_log = services.focus_log
         self._price_sources = services.price_sources
         self.voice = VoiceSpeaker(
             client=lambda: VoicevoxClient(self.settings.voice_url),
@@ -136,6 +147,8 @@ class MascotApp(tk.Tk):
         self.mouth_open = False
         self.blinking = False
         self.busy = False
+        self.presence = PresenceTracker(self.settings.away_minutes, self.settings.break_reminder_minutes,
+                                        self.settings.water_reminder_minutes)
         self._drag_start: tuple[int, int, int, int] | None = None
         self._dragged = False
         self._last_hover = 0.0
@@ -153,6 +166,8 @@ class MascotApp(tk.Tk):
         self.after(EVENT_POLL_MS, self._drain_events)
         self.after(FIRST_REMINDER_CHECK_MS, self._check_reminders)
         self.after(TIMER_TICK_MS, self._tick_timer)
+        self.after(PRESENCE_POLL_MS, self._presence_loop)
+        self.after(ROUTINE_POLL_MS, self._routine_loop)
         self.after(FIRST_PRICE_CHECK_MS, self._price_loop)
         self.after(FIRST_BLINK_MS, self._blink)
         self.after(POINTER_POLL_MS, self._watch_pointer)
@@ -254,12 +269,14 @@ class MascotApp(tk.Tk):
         self.menu.add_separator()
         self.menu.add_command(label="일정 보기", command=lambda: ScheduleWindow(self, self.schedule))
         self.menu.add_command(label="오늘 일정 브리핑", command=lambda: self.brief_today(force=True))
+        self.menu.add_command(label="오늘 하루 정리", command=lambda: self.wrap_up(force=True))
         self.menu.add_command(label="할 일", command=lambda: TodoWindow(self, self.todos))
         self.menu.add_command(label="집중 타이머 시작 (25분)", command=lambda: self.start_focus(25, 5))
         self.menu.add_command(label="최저가 알림", command=self.open_price_window)
         self.menu.add_separator()
         self.menu.add_command(label="가격 알림 설정…", command=self.open_price_settings)
         self.menu.add_command(label="음성 설정…", command=self.open_voice_settings)
+        self.menu.add_command(label="생활 알림 설정…", command=self.open_routine_settings)
         self.menu.add_separator()
         self.menu.add_command(label="대화 기록 보기", command=self.show_log)
         self.menu.add_command(label="이 캐릭터의 기억 지우기", command=self.clear_memory)
@@ -526,6 +543,7 @@ class MascotApp(tk.Tk):
             "voice_error": self._on_voice_error,
             "prices": self._show_price_results,
             "notice": self._on_notice,
+            "briefing": self._on_briefing,
         }.get(kind)
         if handler is not None:
             handler(*values)
@@ -648,18 +666,35 @@ class MascotApp(tk.Tk):
                 self.bell()
 
     def brief_today(self, force: bool = False) -> None:
-        """Once a day (or on request), list today's events in the character's voice."""
+        """Once a day (at start-up, or from the set time on) or on request: today's events and weather."""
 
         now = datetime.now()
         today = now.date().isoformat()
-        if not force and self.settings.last_briefing == today:
-            return
         if not force:
+            clock = parse_clock(self.settings.briefing_time)
+            due = daily_due(now, clock, self.settings.last_briefing) if clock else self.settings.last_briefing != today
+            if not due:
+                return
             self._update_settings(last_briefing=today)
+        if self.settings.weather_lat is not None and self.settings.weather_lon is not None:
+            place = Place(self.settings.weather_city, self.settings.weather_lat, self.settings.weather_lon)
+            threading.Thread(target=self._fetch_weather, args=(place, force), daemon=True).start()
+        else:
+            self._on_briefing(None, force)
+
+    def _fetch_weather(self, place: Place, force: bool) -> None:
+        try:
+            line = weather_line(place.name, fetch_today(place, datetime.now()))
+        except WeatherError:
+            line = None  # no weather today; the schedule part of the briefing still comes
+        self.events.put(("briefing", line, force))
+
+    def _on_briefing(self, weather: str | None, force: bool) -> None:
+        now = datetime.now()
         start = datetime.combine(now.date(), datetime.min.time())
         events = self.schedule.between(start, start + timedelta(days=1))
         urgent = [todo for todo in self.todos.open() if todo.due and todo.due.date() <= now.date()]
-        briefing = compose_briefing(self.persona, events, urgent, now.date())
+        briefing = with_weather(compose_briefing(self.persona, events, urgent, now.date()), weather)
         if briefing is None:
             if force:
                 self.say("오늘은 일정도 급한 할 일도 없어요.", "neutral")
@@ -667,6 +702,58 @@ class MascotApp(tk.Tk):
         text, headline = briefing
         self.say(text, "happy")
         self.speak(headline)
+
+    def wrap_up(self, force: bool = False) -> None:
+        """Evening wrap-up: focus blocks and finished to-dos today, and tomorrow's first event."""
+
+        now = datetime.now()
+        if not force:
+            self._update_settings(last_wrapup=now.date().isoformat())
+        start = datetime.combine(now.date(), datetime.min.time())
+        tomorrow = start + timedelta(days=1)
+        text, headline = compose_wrapup(self.persona, self.focus_log.summary(start, tomorrow),
+                                        self.todos.done_between(start, tomorrow),
+                                        self.schedule.between(tomorrow, tomorrow + timedelta(days=1)))
+        self.say(text, "happy")
+        self.speak(headline)
+
+    def _routine_loop(self) -> None:
+        try:
+            self._routine_step()
+        finally:
+            self.after(ROUTINE_POLL_MS, self._routine_loop)
+
+    def _routine_step(self) -> None:
+        if self.state() == "withdrawn" or self.busy or self.card.visible:
+            return
+        now = datetime.now()
+        clock = parse_clock(self.settings.briefing_time)
+        # One routine line per poll, so a late start does not put the wrap-up over the briefing.
+        if clock and daily_due(now, clock, self.settings.last_briefing):
+            self.brief_today()
+        elif daily_due(now, parse_clock(self.settings.wrapup_time), self.settings.last_wrapup, WRAPUP_WINDOW):
+            self.wrap_up()
+
+    # ----- presence (Windows: time since the last input only) -----------------------
+
+    def _presence_loop(self) -> None:
+        try:
+            self._presence_step()
+        finally:
+            self.after(PRESENCE_POLL_MS, self._presence_loop)
+
+    def _presence_step(self) -> None:
+        if not self.settings.presence_enabled:
+            return
+        idle = idle_seconds()
+        if idle is None:
+            return
+        now = datetime.now()
+        focusing = self.focus_timer.state(now).phase == "focus"
+        quiet = self.state() == "withdrawn" or self.busy or self.card.visible or focusing
+        for index, (kind, minutes) in enumerate(self.presence.update(now, idle, quiet)):
+            line = presence_line(self.persona, kind, minutes)
+            self.after(index * SECOND_LINE_GAP_MS, lambda line=line: self.talk(*line))
 
     # ----- focus timer --------------------------------------------------------------
 
@@ -683,7 +770,10 @@ class MascotApp(tk.Tk):
 
     def _timer_step(self) -> None:
         now = datetime.now()
-        for event in self.focus_timer.tick(now):
+        events = self.focus_timer.tick(now)
+        for minutes in self.focus_timer.take_finished():
+            self.focus_log.add(now, minutes)
+        for event in events:
             self.talk(*timer_line(self.persona, self.focus_timer, event))
             self.bell()
         self._draw_timer()
@@ -773,6 +863,14 @@ class MascotApp(tk.Tk):
 
     def open_price_window(self) -> None:
         PriceWindow(self, self.watches, self.check_prices_now, lambda: bool(self._price_sources()))
+
+    def open_routine_settings(self) -> None:
+        def save(**changes: object) -> None:
+            self._update_settings(**changes)
+            self.presence.configure(self.settings.away_minutes, self.settings.break_reminder_minutes,
+                                    self.settings.water_reminder_minutes)
+
+        RoutineSettingsWindow(self, self.settings, save)
 
     def open_price_settings(self) -> None:
         def save(**changes: object) -> None:

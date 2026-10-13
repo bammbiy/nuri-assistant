@@ -37,6 +37,19 @@ class CompanionSettings:
     rename_media: str = ""
     rename_extensions: list = field(default_factory=lambda: list(DEFAULT_EXTENSIONS))
     rename_skip_named: bool = True
+    # Daily routine ("생활 알림 설정" window). Times are "HH:MM"; "" means at start-up (briefing) or off.
+    briefing_time: str = ""
+    wrapup_time: str = "18:00"
+    last_wrapup: str = ""
+    # Weather in the morning briefing (Open-Meteo, free, no key); off until a city is set.
+    weather_city: str = ""
+    weather_lat: float | None = None
+    weather_lon: float | None = None
+    # Presence (Windows: time since the last key/mouse input only). 0 turns a reminder off.
+    presence_enabled: bool = True
+    away_minutes: int = 30
+    break_reminder_minutes: int = 60
+    water_reminder_minutes: int = 90
     x: int | None = None
     y: int | None = None
 
