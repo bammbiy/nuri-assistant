@@ -22,7 +22,7 @@ python src/run_nuri.py --classic  # 파일 정리 도구만
 python -m nuri_assistant [--classic]   # 같은 실행 (src/ 안에서, 또는 pip install -e . 뒤 어디서나. 설치하면 nuri-assistant 명령도 생김)
 pip install -e .[dev]             # 선택: 개발용 설치(pyflakes). 그림이 assets/에 있어서 편집 설치(-e)만 지원
 python -m unittest discover -s tests                         # 저장소 루트에서 (테스트는 src.nuri_assistant 로 import)
-python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 105개 통과)
+python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 106개 통과)
 python -m pyflakes src tests tools
 pip install -r tools/requirements-frames.txt                 # 프레임 생성 도구용 (앱에는 필요 없음)
 python tools/build_frames.py nuri|sera|yuki|akane|shizuku|hinata|sakura|reika [출력폴더]   # 캐릭터 프레임 재생성
@@ -114,7 +114,7 @@ tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창�
 - 백그라운드 작업(모델 호출, 가격 조회, 음성 합성)은 스레드에서 돌리고 결과는 `MascotApp.events` 큐에 `("종류", 값...)`으로 넘깁니다. 새 종류는 `_handle_event`의 표에 `_on_<종류>` 메서드로 추가합니다. 스레드에서 Tk 위젯을 직접 만지지 않습니다.
 - 말풍선과 음성을 함께 낼 때는 `MascotApp.talk()`, 말풍선만이면 `say()`. 오류·안내 문구는 읽지 않습니다.
 - 모델 답변의 일본어 음성 대사는 `<ja>…</ja>`로 받고 `ReplyParser.voice`에 담깁니다(말풍선과 대화 기억에는 남기지 않음).
-- 파일 이름 규칙은 내부적으로 `{DATE}`·`{YEAR}`·`{MONTH}`·`{DAY}`·`{MEDIA}`·`{PAGE}`(설정 창에는 `{날짜}`·`{연도}`·`{월}`·`{일}`·`{매체}`·`{페이지}`, 변환은 `classic.core.naming`의 `rule_from_korean`/`rule_to_korean`). `{PAGE}`는 필수(`validate_rule`), `{MEDIA}`가 없으면 매체코드를 묻지 않습니다. 대화 도구는 `CompanionSettings.rename_*`를 `services.rename_options()`로 받아 매번 읽으므로 설정을 바꾸면 바로 적용됩니다. 요청 문장에 규칙을 말하면("매체-날짜 순") 그쪽이 우선.
+- 파일 이름 규칙은 내부적으로 `{DATE}`·`{YEAR}`·`{MONTH}`·`{DAY}`·`{MEDIA}`·`{PAGE}`(설정 창에는 `{날짜}`·`{연도}`·`{월}`·`{일}`·`{매체}`·`{페이지}`, 변환은 `classic.core.naming`의 `rule_from_korean`/`rule_to_korean`). `{PAGE}`는 필수이고 중괄호 짝이 안 맞는 규칙도 거부(`validate_rule`), `{MEDIA}`가 없으면 매체코드를 묻지 않습니다. 대화 도구는 `CompanionSettings.rename_*`를 `services.rename_options()`로 받아(메모장으로 고친 확장자 `"pdf"`·문자열도 정리) 매번 읽으므로 설정을 바꾸면 바로 적용됩니다. 요청 문장에 규칙을 말하면("매체-날짜 순") 그쪽이 우선.
 - 설정 항목을 추가할 때는 `CompanionSettings`에 기본값과 함께 넣습니다. 알 수 없는 키는 로드 시 무시되므로 옛 설정 파일도 열립니다.
 
 ## UI 관례

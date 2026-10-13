@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from src.nuri_assistant.companion import CompanionSettings
-from src.nuri_assistant.services import Services
+from src.nuri_assistant.services import Services, rename_options
 
 
 class ServicesTest(unittest.TestCase):
@@ -23,6 +23,16 @@ class ServicesTest(unittest.TestCase):
             self.assertEqual(services.price_sources(), [])
             settings = replace(settings, naver_client_id="id", naver_client_secret="secret")
             self.assertEqual(len(services.price_sources()), 1)
+
+    def test_rename_options_extensions(self) -> None:
+        from src.nuri_assistant.classic.tools import RenameOptions
+
+        def exts(value):
+            return rename_options(replace(CompanionSettings(), rename_extensions=value)).extensions
+
+        self.assertEqual(exts(["pdf", ".HWP", "pdf"]), (".pdf", ".hwp"))
+        self.assertEqual(exts("jpg, png"), (".jpg", ".png"))
+        self.assertEqual(exts([]), RenameOptions.extensions)
 
 
 if __name__ == "__main__":

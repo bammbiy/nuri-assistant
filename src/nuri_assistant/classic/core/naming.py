@@ -60,6 +60,10 @@ def validate_rule(rule: str) -> None:
         raise RenameError("파일마다 이름이 달라지도록 {페이지}가 꼭 들어가야 해요.")
     if not safe_name(_TOKEN.sub("x", rule)):
         raise RenameError("이름 형식이 비어 있어요.")
+    try:
+        rule.format(DATE="20260715", YEAR="2026", MONTH="07", DAY="15", MEDIA="ja00", PAGE="001")
+    except (ValueError, IndexError, KeyError):
+        raise RenameError("중괄호 { } 짝이 맞지 않아요.") from None
 
 
 def rule_uses_media(rule: str) -> bool:

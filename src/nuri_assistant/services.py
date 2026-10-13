@@ -18,9 +18,27 @@ from .schedule import ScheduleStore, ScheduleTools
 from .todo import TodoStore, TodoTools
 
 
+def _clean_extensions(raw) -> tuple[str, ...]:
+    """companion.json may be hand-edited: accept a list or a comma/space separated string."""
+
+    if isinstance(raw, str):
+        raw = raw.replace(",", " ").split()
+    elif not isinstance(raw, (list, tuple)):
+        raw = ()
+    found: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        name = item.strip().lstrip(".").strip().lower()
+        if name and "." + name not in found:
+            found.append("." + name)
+    return tuple(found)
+
+
 def rename_options(settings: CompanionSettings) -> RenameOptions:
     return RenameOptions(settings.rename_rule, settings.rename_media,
-                         tuple(settings.rename_extensions) or RenameOptions.extensions, settings.rename_skip_named)
+                         _clean_extensions(settings.rename_extensions) or RenameOptions.extensions,
+                         settings.rename_skip_named)
 
 
 def price_sources(settings: CompanionSettings) -> list:

@@ -362,7 +362,8 @@ class FileToolsTest(unittest.TestCase):
         self.assertEqual(rule_to_korean("{YEAR}-{MONTH}-{DAY}_p{PAGE}"), "{연도}-{월}-{일}_p{페이지}")
         self.assertTrue(rule_pattern("{DATE}-{MEDIA}-p{PAGE}").fullmatch("20260715-JA00-p012"))
         self.assertFalse(rule_pattern("{DATE}_{MEDIA}_{PAGE}").fullmatch("scan_20260715"))
-        for bad in ("{DATE}_{MEDIA}", "{날짜}_{PAGE}", "{DATE}_{PAGE}_{PAGE}x{FOO}"):
+        for bad in ("{DATE}_{MEDIA}", "{날짜}_{PAGE}", "{DATE}_{PAGE}_{PAGE}x{FOO}",
+                    "{DATE}_{PAGE}_{", "{PAGE}}"):
             with self.assertRaises(RenameError):
                 validate_rule(bad)
         validate_rule(rule_from_korean("{연도}{월}{일}-{페이지}"))
