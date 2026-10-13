@@ -75,16 +75,18 @@ assets/characters/<id>/        상반신 프레임 405×344 + 원본 시트 2장
 assets/characters/<id>/full/   전신 프레임 405×480
 tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터별 좌표는 CHARACTERS 설정, 의존성은 tools/requirements-frames.txt)
 tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창의 검은 테두리 방지, 여러 번 돌려도 같음)
-.claude/agents/                서브 에이전트: searcher(Haiku, 검색), worker(Sonnet, 구현), reviewer(Sonnet, 검토)
+.claude/agents/                서브 에이전트: searcher·helper(Haiku, 검색·단순 반복), worker(Sonnet, 구현), reviewer(Sonnet, 검토)
 ```
 
 사용자 데이터(`~/.nuri-assistant/`): `companion.json`(설정·네이버 API 키, 못 읽으면 `.bak`로 보존), `error.log`(예외 기록), `companion.sqlite3`(대화·일정·할 일·가격 감시), `history.sqlite3`(파일 이름 변경 이력), `profiles.json`(파일 정리 도구의 작업 프로필), `characters/<id>/`(개인 캐릭터 이미지, 저장소보다 우선).
 
 **AI 에이전트 작업 분담(사용자 지시):** 최종 판단은 메인 모델(Opus)이 하고, 일은 서브 에이전트에 나눕니다(`.claude/agents/`).
 - `searcher`(Haiku, 읽기만): 코드 검색·여러 파일 훑어보기. 메인 모델은 직접 넓게 검색하지 않습니다.
+- `helper`(Haiku): 판단이 필요 없는 단순 반복 일 — 테스트·pyflakes 돌리고 결과 요약, 문서 오타·깨진 경로 찾기, 메인 모델이 정확히 지정한 기계적 치환, 정해진 스크립트 실행. 실패 원인 고치기는 worker 몫.
 - `worker`(Sonnet): 메인 모델이 무엇을 어떻게 바꿀지 정해 준 구현(함수 추가·수정, 테스트 작성, 정해진 규칙대로 여러 파일 고치기, 실패 테스트 고치기). 커밋·푸시·CLAUDE.md·HISTORY.md는 하지 않음.
 - `reviewer`(Sonnet, 읽기만): 커밋 전 변경 검토(원칙 위반·버그·빠진 테스트). 지적만 하고 반영 여부는 메인 모델이 정함.
 - 메인 모델 몫: 설계·범위 결정, 사용자와의 대화, 캐릭터 좌표 측정·표정 검수 같은 눈으로 판단하는 일, 서브 에이전트 결과 확인(테스트를 직접 다시 돌려 봄), 문서 갱신, 커밋·푸시.
+- 서브 에이전트 모델은 각 `.claude/agents/*.md`의 `model:`로 고정되어 있어 사용자가 메인 모델 선택 창에서 고른 모델(Opus)과 상관없이 그대로 돕니다.
 - 서브 에이전트 보고는 그대로 믿지 않고 메인 모델이 diff와 테스트로 확인한 뒤 반영합니다.
 
 ## 설계 원칙 (꼭 지킬 것)
