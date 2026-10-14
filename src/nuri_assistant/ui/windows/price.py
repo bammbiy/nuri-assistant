@@ -153,6 +153,8 @@ class PriceWindow(CardListMixin, tk.Toplevel):
         else:
             canvas.create_text(x1 + 18, y + 46, text="확인 전", anchor="w", font=(FONT, 13, "bold"), fill=SUBTLE)
 
+        self._sparkline(watch, x2 - 150, y + 38, x2 - 20, y + 62)
+
         details = []
         if watch.target_price:
             details.append(f"목표 {won(watch.target_price)}")
@@ -174,6 +176,24 @@ class PriceWindow(CardListMixin, tk.Toplevel):
             canvas.tag_bind(tag, "<Button-1>", lambda _e, link=watch.last_link: webbrowser.open(link))
         self._delete_button(watch.id, x2 - 22, y + 21)
         return y2 + 10
+
+    def _sparkline(self, watch: Watch, x1: int, y1: int, x2: int, y2: int) -> None:
+        points = [price for _when, price, _mall in reversed(self.store.history(watch.id, limit=30))]
+        if len(points) < 2:
+            return
+        low, high = min(points), max(points)
+        span = max(high - low, 1)
+        step = (x2 - x1) / (len(points) - 1)
+        coords = [(x1 + i * step, y2 - (price - low) / span * (y2 - y1) if high > low else (y1 + y2) / 2)
+                  for i, price in enumerate(points)]
+        flat = [value for point in coords for value in point]
+        self.canvas.create_line(*flat, fill=ACCENT, width=2, capstyle="round", joinstyle="round")
+        lowest = len(points) - 1 - points[::-1].index(low)  # latest occurrence of the minimum
+        lx, ly = coords[lowest]
+        self.canvas.create_oval(lx - 3, ly - 3, lx + 3, ly + 3, fill=TODAY, outline="")
+        ex, ey = coords[-1]
+        if lowest != len(points) - 1:
+            self.canvas.create_oval(ex - 3, ey - 3, ex + 3, ey + 3, fill=ACCENT, outline=CARD, width=1)
 
 
 def _ago(moment: datetime) -> str:

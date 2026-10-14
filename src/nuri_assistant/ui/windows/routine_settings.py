@@ -7,6 +7,7 @@ import tkinter as tk
 from typing import Callable
 
 from ...companion import CompanionSettings
+from ...fun import parse_birthday
 from ...routine import parse_clock
 from ...weather import WeatherError, geocode
 from ..theme import BG, DANGER, FONT, SUBTLE, TEXT, button, entry
@@ -37,6 +38,9 @@ class RoutineSettingsWindow(tk.Toplevel):
         self.briefing = self._row(body, "아침 브리핑", settings.briefing_time, "비우면 앱을 켤 때")
         self.wrapup = self._row(body, "하루 정리", settings.wrapup_time, "비우면 끔")
         self.city = self._row(body, "날씨 도시", settings.weather_city, "예: 서울, 부산 (비우면 날씨 없음)", width=14)
+        month, _, day = settings.user_birthday.partition("-")
+        birthday = f"{int(month)}월 {int(day)}일" if month.isdigit() and day.isdigit() else ""
+        self.birthday = self._row(body, "내 생일", birthday, "예: 3월 14일 (그날 비서가 축하해요)", width=10)
 
         self._section(body, "자리 비움·건강")
         self.presence = tk.BooleanVar(value=settings.presence_enabled)
@@ -52,6 +56,14 @@ class RoutineSettingsWindow(tk.Toplevel):
         self.water = self._row(body, "물 마시기 알림", str(settings.water_reminder_minutes), "분마다 (0이면 끔)", width=5)
         tk.Label(body, text="집중 타이머가 도는 동안에는 쉬는 시간·물 알림을 미뤄요.",
                  font=(FONT, 9), bg=BG, fg=SUBTLE).pack(anchor="w", pady=(4, 0))
+
+        self._section(body, "복사한 글 도우미")
+        self.clipboard = tk.BooleanVar(value=settings.clipboard_watch)
+        tk.Checkbutton(body, text="날짜가 든 글·쇼핑 링크를 복사하면 일정·가격 알림을 제안하기", variable=self.clipboard,
+                       font=(FONT, 10), bg=BG, fg=TEXT, activebackground=BG, selectcolor="#ffffff",
+                       highlightthickness=0, bd=0, anchor="w").pack(fill="x")
+        tk.Label(body, text="복사한 글은 저장하지 않고, 확인 카드를 눌러야 등록돼요. 긴 글·비밀번호 같은 글은 보지 않아요.",
+                 font=(FONT, 9), bg=BG, fg=SUBTLE).pack(anchor="w")
 
         self.notice = tk.Label(body, text="", font=(FONT, 9), bg=BG, fg=DANGER, anchor="w", justify="left")
         self.notice.pack(fill="x", pady=(10, 0))
@@ -86,6 +98,15 @@ class RoutineSettingsWindow(tk.Toplevel):
             raise ValueError(f"{name} 시각을 08:30처럼 적어 주세요.")
         return clock.strftime("%H:%M")
 
+    def _birthday(self) -> str:
+        text = self.birthday.get().strip()
+        if not text:
+            return ""
+        birthday = parse_birthday(text)
+        if birthday is None:
+            raise ValueError("생일은 3월 14일처럼 적어 주세요.")
+        return birthday
+
     def _minutes(self, widget: tk.Entry, name: str) -> int:
         try:
             value = int(widget.get().strip() or 0)
@@ -104,6 +125,8 @@ class RoutineSettingsWindow(tk.Toplevel):
                 away_minutes=max(self._minutes(self.away, "돌아오면 인사"), 1),
                 break_reminder_minutes=self._minutes(self.rest, "쉬는 시간 알림"),
                 water_reminder_minutes=self._minutes(self.water, "물 마시기 알림"),
+                clipboard_watch=self.clipboard.get(),
+                user_birthday=self._birthday(),
             )
         except ValueError as exc:
             self.notice.configure(text=str(exc))

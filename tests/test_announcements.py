@@ -5,8 +5,12 @@ from datetime import datetime, timedelta
 
 from src.nuri_assistant.announcements import (
     compose_briefing,
+    clipboard_line,
     compose_wrapup,
+    downloads_line,
+    level_up_line,
     nag_line,
+    occasion_line,
     presence_line,
     price_alert_line,
     reminder_line,
@@ -130,6 +134,33 @@ class WrapupTest(unittest.TestCase):
     def test_nothing(self) -> None:
         text, _ = compose_wrapup(PERSONA, (0, 0), [], [])
         self.assertEqual(text.split("\n")[1:], ["· 오늘은 기록된 집중이나 끝낸 일이 없어요.", "· 내일은 일정이 없어요."])
+
+
+class SpecialLinesTest(unittest.TestCase):
+    def test_level_up_line_levels_and_clamping(self) -> None:
+        lines = PERSONA.level_up
+        for level in (1, 2, 3):
+            self.assertEqual(level_up_line(PERSONA, level), (lines[level - 1], "shy"))
+        self.assertEqual(level_up_line(PERSONA, 0)[0], lines[0])
+        self.assertEqual(level_up_line(PERSONA, 9)[0], lines[-1])
+
+    def test_occasion_line(self) -> None:
+        self.assertEqual(occasion_line(PERSONA, "birthday", 0), (PERSONA.birthday, "happy"))
+        text, expression = occasion_line(PERSONA, "together", 100)
+        self.assertEqual((text, expression), (PERSONA.together.format(days=100), "happy"))
+        self.assertIn("100", text)
+
+    def test_downloads_line(self) -> None:
+        self.assertIn("12개", downloads_line(12, True))
+        self.assertIn("정리해 둘까요", downloads_line(12, True))
+        self.assertIn("매체코드", downloads_line(12, False))
+        self.assertNotEqual(downloads_line(12, True), downloads_line(12, False))
+
+    def test_clipboard_line(self) -> None:
+        self.assertIn("가격", clipboard_line("price", "", ""))
+        text = clipboard_line("event", "치과", "내일 15:00")
+        self.assertIn("치과", text)
+        self.assertIn("내일 15:00", text)
 
 
 class ConfirmationTest(unittest.TestCase):

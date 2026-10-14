@@ -3,8 +3,10 @@ from __future__ import annotations
 import tkinter as tk
 from datetime import date, datetime, time, timedelta
 
-from ...schedule import Event, ScheduleStore, format_day
-from ..theme import ACCENT, BG, CARD, CARD_LINE, FONT, SHADOW, SOFT, SUBTLE, TEXT, TODAY, fit, round_rect
+from ...schedule import Event, ScheduleStore, WhenError, default_remind_at, format_day, parse_when
+from ..theme import (
+    ACCENT, BG, CARD, CARD_LINE, DANGER, FONT, SHADOW, SOFT, SUBTLE, TEXT, TODAY, button, entry, fit, round_rect,
+)
 from .cards import CardListMixin
 
 
@@ -36,14 +38,71 @@ class ScheduleWindow(CardListMixin, tk.Toplevel):
         self.summary = tk.Label(header, font=(FONT, 10), bg=BG, fg=SUBTLE)
         self.summary.pack(side="left", padx=(10, 0), pady=(6, 0))
 
+        form = tk.Frame(self, bg=BG)
+        form.pack(fill="x", padx=PAD, pady=(0, 4))
+        self.title_entry = entry(form, width=16)
+        self.when_entry = entry(form, width=20)
+        self._placeholder(self.title_entry, "일정 제목")
+        self._placeholder(self.when_entry, "언제 (예: 내일 오후 3시)")
+        self.title_entry.pack(side="left", fill="x", expand=True, ipady=6)
+        self.when_entry.pack(side="left", padx=6, ipady=6)
+        button(form, "추가", self._add).pack(side="left")
+        self.notice = tk.Label(self, text="", font=(FONT, 9), bg=BG, fg=DANGER, anchor="w")
+        self.notice.pack(fill="x", padx=PAD)
+
         self.canvas = tk.Canvas(self, bg=BG, highlightthickness=0, bd=0)
-        self.canvas.pack(fill="both", expand=True)
+        self.canvas.pack(fill="both", expand=True, pady=(4, 0))
         self.canvas.bind("<Configure>", lambda _event: self.refresh())
         for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
             self.canvas.bind(sequence, self._scroll)
         self.canvas.bind("<Button-1>", self._disarm, add="+")
         self.bind("<FocusIn>", lambda event: self.refresh() if event.widget is self else None)
         self.bind("<Escape>", lambda _event: self.destroy())
+
+    # ----- form -----------------------------------------------------------------------
+
+    def _placeholder(self, widget: tk.Entry, hint: str) -> None:
+        def show(_event=None) -> None:
+            if not widget.get():
+                widget.insert(0, hint)
+                widget.configure(fg=SUBTLE)
+                widget.is_hint = True
+
+        def clear(_event=None) -> None:
+            if getattr(widget, "is_hint", False):
+                widget.delete(0, "end")
+                widget.configure(fg=TEXT)
+                widget.is_hint = False
+
+        widget.bind("<FocusIn>", clear)
+        widget.bind("<FocusOut>", show)
+        widget.bind("<Return>", lambda _event: self._add())
+        show()
+
+    def _value(self, widget: tk.Entry) -> str:
+        return "" if getattr(widget, "is_hint", False) else widget.get().strip()
+
+    def _add(self) -> None:
+        title, when_text = self._value(self.title_entry), self._value(self.when_entry)
+        if not title:
+            self.notice.configure(text="일정 제목을 적어 주세요.")
+            return
+        if not when_text:
+            self.notice.configure(text="언제인지 적어 주세요. 예: 내일 오후 3시")
+            return
+        now = datetime.now()
+        try:
+            when = parse_when(when_text, now)
+        except WhenError as exc:
+            self.notice.configure(text=str(exc))
+            return
+        self.store.add(title, when.start, when.all_day, default_remind_at(when.start, when.all_day, now))
+        self.notice.configure(text="")
+        for widget in (self.title_entry, self.when_entry):
+            widget.delete(0, "end")
+            widget.event_generate("<FocusOut>")
+        self.canvas.focus_set()
+        self.refresh()
 
     # ----- drawing ------------------------------------------------------------------
 

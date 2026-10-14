@@ -67,6 +67,17 @@ class RenameSettingsWindow(tk.Toplevel):
                        variable=self.skip_named, font=(FONT, 10), bg=BG, fg=TEXT, activebackground=BG,
                        selectcolor="#ffffff", highlightthickness=0, bd=0, anchor="w").pack(fill="x", pady=(14, 0))
 
+        self.downloads = tk.BooleanVar(value=settings.downloads_watch)
+        row = tk.Frame(body, bg=BG)
+        row.pack(fill="x", pady=(6, 0))
+        tk.Checkbutton(row, text="다운로드 폴더에 정리 안 된 파일이", variable=self.downloads, font=(FONT, 10), bg=BG, fg=TEXT,
+                       activebackground=BG, selectcolor="#ffffff", highlightthickness=0, bd=0).pack(side="left")
+        self.threshold = entry(row, width=4)
+        self.threshold.insert(0, str(settings.downloads_threshold))
+        self.threshold.pack(side="left", padx=4, ipady=3)
+        tk.Label(row, text="개 넘게 쌓이면 정리하자고 하기 (하루 한 번, 파일 이름만 봐요)", font=(FONT, 10), bg=BG,
+                 fg=TEXT).pack(side="left")
+
         self.notice = tk.Label(body, text="", font=(FONT, 9), bg=BG, fg=DANGER, anchor="w")
         self.notice.pack(fill="x", pady=(8, 0))
         actions = tk.Frame(body, bg=BG)
@@ -143,6 +154,14 @@ class RenameSettingsWindow(tk.Toplevel):
         if not extensions:
             self.notice.configure(text="정리할 파일 종류를 하나 이상 적어 주세요.")
             return
+        try:
+            threshold = int(self.threshold.get().strip())
+        except ValueError:
+            threshold = 0
+        if not 1 <= threshold <= 500:
+            self.notice.configure(text="쌓인 파일 수는 1~500 사이로 적어 주세요.")
+            return
         self.on_save(rename_rule=rule, rename_media=media, rename_extensions=extensions,
-                     rename_skip_named=self.skip_named.get())
+                     rename_skip_named=self.skip_named.get(), downloads_watch=self.downloads.get(),
+                     downloads_threshold=threshold)
         self.destroy()

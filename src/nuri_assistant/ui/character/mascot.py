@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import queue
 import random
 import sys
@@ -13,8 +14,11 @@ from pathlib import Path
 from tkinter import messagebox, simpledialog
 
 from ...announcements import (
-    compose_briefing, compose_wrapup, nag_line, presence_line, price_alert_line, reminder_line, timer_line, with_weather,
+    clipboard_line, compose_briefing, compose_wrapup, downloads_line, level_up_line, nag_line, occasion_line, presence_line,
+    price_alert_line, reminder_line, timer_line, with_weather,
 )
+from ...classic.core import rule_pattern
+from ...classic.tools import resolve_folder
 from ...classic.tools import RenameAction
 from ...companion import (
     EXPRESSIONS,
@@ -29,16 +33,22 @@ from ...companion import (
 )
 from ...crashlog import log_exception
 from ...paths import APP_DIR, ASSETS_DIR, SETTINGS_PATH, USER_CHARACTERS
+from ...fun import fortune_text, occasion_today, today_fortune
+from ...pcwatch import DownloadNudge, count_waiting, suggest
 from ...presence import PresenceTracker, idle_seconds
 from ...pricewatch import CheckResult, WatchAction
 from ...routine import daily_due, parse_clock
 from ...screen import Rect, all_monitors, default_position, is_reachable, work_area
-from ...services import Services
+from ...services import Services, rename_options
+from ...todo import TodoAction
 from ...voice import VoiceSpeaker, VoicevoxClient
 from ...weather import Place, WeatherError, fetch_today, weather_line
 from ..classic.assistant import AssistantWindow
 from ..classic.desktop import NuriAssistantApp
+from ..windows.ai_settings import AISettingsWindow
 from ..windows.conversation_log import ConversationLogWindow
+from ..windows.focus_dialog import FocusDialog
+from ..windows.memos import MemoWindow
 from ..windows.price import PriceWindow
 from ..windows.price_settings import PriceSettingsWindow
 from ..windows.rename_preview import RenamePreviewWindow
@@ -82,6 +92,14 @@ BRIEFING_DELAY_MS = 4500
 PRESENCE_POLL_MS = 30_000  # idle time is checked this often (Windows only)
 ROUTINE_POLL_MS = 30_000   # scheduled briefing / evening wrap-up check
 SECOND_LINE_GAP_MS = 9000  # when two presence lines are due at once
+LEVEL_UP_DELAY_MS = 2500   # a closeness level-up line follows the reply it came from
+MIN_FOCUS_FOR_POINTS = 10  # shorter focus blocks earn no closeness points
+MAX_FACTS = 30             # newest remembered facts put into the system prompt
+ROUTINE_GAP_S = 60         # a special-day line waits this long after a briefing or wrap-up
+DOWNLOADS_POLL_MS = 600_000  # opt-in Downloads check (file names only)
+CLIPBOARD_POLL_MS = 2000     # opt-in clipboard check (text is never stored)
+CLIPBOARD_GAP_S = 60         # at most one clipboard suggestion a minute
+DAY_WORDS_ONLY = {"오늘", "내일", "모레", "글피", "내일모레"}  # a bare day word is not an appointment
 WRAPUP_WINDOW = timedelta(hours=3)  # an app started later than this after the wrap-up time skips it
 FIRST_BLINK_MS = 3500
 BLINK_MS = 140
@@ -118,7 +136,7 @@ class MascotApp(tk.Tk):
         self.store, self.schedule, self.todos = services.store, services.schedule, services.todos
         self.watches, self.price_checker = services.watches, services.price_checker
         self.focus_timer, self.toolbox, self.history = services.focus_timer, services.toolbox, services.history
-        self.focus_log = services.focus_log
+        self.focus_log, self.affection, self.memos = services.focus_log, services.affection, services.memos
         self._price_sources = services.price_sources
         self.voice = VoiceSpeaker(
             client=lambda: VoicevoxClient(self.settings.voice_url),
@@ -147,6 +165,10 @@ class MascotApp(tk.Tk):
         self.mouth_open = False
         self.blinking = False
         self.busy = False
+        self.downloads_nudge = DownloadNudge(self.settings.downloads_threshold)
+        self._last_clip: str | None = None
+        self._last_routine_line = time.monotonic()  # start-up greeting counts as one
+        self._last_clip_offer = -CLIPBOARD_GAP_S * 1.0
         self.presence = PresenceTracker(self.settings.away_minutes, self.settings.break_reminder_minutes,
                                         self.settings.water_reminder_minutes)
         self._drag_start: tuple[int, int, int, int] | None = None
@@ -163,11 +185,15 @@ class MascotApp(tk.Tk):
         else:
             self.talk(random.choice(self.persona.greetings), "happy")
             self.after(BRIEFING_DELAY_MS, self.brief_today)
+        if not self.settings.first_met:
+            self._update_settings(first_met=datetime.now().date().isoformat())
         self.after(EVENT_POLL_MS, self._drain_events)
         self.after(FIRST_REMINDER_CHECK_MS, self._check_reminders)
         self.after(TIMER_TICK_MS, self._tick_timer)
         self.after(PRESENCE_POLL_MS, self._presence_loop)
         self.after(ROUTINE_POLL_MS, self._routine_loop)
+        self.after(DOWNLOADS_POLL_MS, self._downloads_loop)
+        self.after(CLIPBOARD_POLL_MS, self._clipboard_loop)
         self.after(FIRST_PRICE_CHECK_MS, self._price_loop)
         self.after(FIRST_BLINK_MS, self._blink)
         self.after(POINTER_POLL_MS, self._watch_pointer)
@@ -216,7 +242,13 @@ class MascotApp(tk.Tk):
             history_limit=settings.history_limit,
             tools=self.toolbox,
             voice=settings.voice_enabled,
+            context=self._companion_context,
         )
+
+    def _companion_context(self) -> tuple[str, tuple[str, ...]]:
+        """Closeness name and remembered facts for the system prompt (read on the worker thread; SQLite only)."""
+
+        return self.affection.level(self.settings.persona_id)[1], tuple(memo.text for memo in self.memos.all()[-MAX_FACTS:])
 
     def _update_settings(self, **changes: object) -> None:
         self.settings = replace(self.settings, **changes)
@@ -265,13 +297,13 @@ class MascotApp(tk.Tk):
         self.menu.add_checkbutton(label="전신으로 보기", variable=self.full_var,
                                   command=lambda: self.set_display_mode("full" if self.full_var.get() else "bust"))
         self.menu.add_command(label="내 이름 설정", command=self.ask_user_name)
-        self.menu.add_command(label="AI 모델 설정", command=self.ask_model)
+        self.menu.add_command(label="AI 설정…", command=self.open_ai_settings)
         self.menu.add_separator()
         self.menu.add_command(label="일정 보기", command=lambda: ScheduleWindow(self, self.schedule))
         self.menu.add_command(label="오늘 일정 브리핑", command=lambda: self.brief_today(force=True))
         self.menu.add_command(label="오늘 하루 정리", command=lambda: self.wrap_up(force=True))
         self.menu.add_command(label="할 일", command=lambda: TodoWindow(self, self.todos))
-        self.menu.add_command(label="집중 타이머 시작 (25분)", command=lambda: self.start_focus(25, 5))
+        self.menu.add_command(label="집중 타이머…", command=self.open_focus_dialog)
         self.menu.add_command(label="최저가 알림", command=self.open_price_window)
         self.menu.add_separator()
         self.menu.add_command(label="가격 알림 설정…", command=self.open_price_settings)
@@ -279,6 +311,9 @@ class MascotApp(tk.Tk):
         self.menu.add_command(label="생활 알림 설정…", command=self.open_routine_settings)
         self.menu.add_separator()
         self.menu.add_command(label="대화 기록 보기", command=self.show_log)
+        self.menu.add_command(label="기억 수첩", command=lambda: MemoWindow(self, self.memos))
+        self.menu.add_command(label="우리 사이", command=self.show_closeness)
+        self.menu.add_command(label="오늘의 운세", command=self.tell_fortune)
         self.menu.add_command(label="이 캐릭터의 기억 지우기", command=self.clear_memory)
         self.menu.add_separator()
         self.menu.add_command(label="파일 정리 도구", command=lambda: NuriAssistantApp(self, history=self.history))
@@ -555,6 +590,7 @@ class MascotApp(tk.Tk):
 
     def _on_done(self, text: str, expression: str | None, actions: list, spoken: str) -> None:
         self.talking = False
+        self.gain("chat")
         self.say(text, expression)
         self.speak(text, japanese=spoken)
         self._set_busy(False)
@@ -634,6 +670,7 @@ class MascotApp(tk.Tk):
             message = self.toolbox.confirm(action)
             self.companion.note(message)
             self.talk(message, "happy")
+            self.gain("todo_done" if isinstance(action, TodoAction) and action.kind == "done" else "approved")
             if isinstance(action, WatchAction) and action.kind == "add":
                 self.check_prices_now()
         else:
@@ -702,6 +739,7 @@ class MascotApp(tk.Tk):
         text, headline = briefing
         self.say(text, "happy")
         self.speak(headline)
+        self._last_routine_line = time.monotonic()
 
     def wrap_up(self, force: bool = False) -> None:
         """Evening wrap-up: focus blocks and finished to-dos today, and tomorrow's first event."""
@@ -716,6 +754,7 @@ class MascotApp(tk.Tk):
                                         self.schedule.between(tomorrow, tomorrow + timedelta(days=1)))
         self.say(text, "happy")
         self.speak(headline)
+        self._last_routine_line = time.monotonic()
 
     def _routine_loop(self) -> None:
         try:
@@ -733,6 +772,110 @@ class MascotApp(tk.Tk):
             self.brief_today()
         elif daily_due(now, parse_clock(self.settings.wrapup_time), self.settings.last_wrapup, WRAPUP_WINDOW):
             self.wrap_up()
+        elif self.settings.last_occasion != now.date().isoformat() and time.monotonic() - self._last_routine_line >= ROUTINE_GAP_S:
+            self._update_settings(last_occasion=now.date().isoformat())
+            occasion = occasion_today(now.date(), self.settings.user_birthday, self.settings.first_met)
+            if occasion:
+                self.talk(*occasion_line(self.persona, occasion.kind, occasion.days))
+
+    # ----- closeness, fortune --------------------------------------------------------
+
+    def gain(self, reason: str) -> None:
+        """Closeness points for the current character; a level-up gets its own line after the reply."""
+
+        try:
+            level = self.affection.add(self.persona.id, reason, datetime.now())
+        except Exception:  # noqa: BLE001 - points are a bonus; never block the chat or the card flow
+            log_exception(*sys.exc_info())
+            return
+        if level:
+            self.after(LEVEL_UP_DELAY_MS, lambda persona=self.persona: self._say_level_up(persona, level))
+
+    def _say_level_up(self, persona, level: int) -> None:
+        if persona is not self.persona:
+            return  # switched characters meanwhile
+        if self.busy or self.card.visible:
+            self.after(LEVEL_UP_DELAY_MS, lambda: self._say_level_up(persona, level))
+            return
+        self.talk(*level_up_line(persona, level))
+
+    def show_closeness(self) -> None:
+        pid = self.persona.id
+        index, name = self.affection.level(pid)
+        nxt = self.affection.next_threshold(pid)
+        rest = f" · 다음 단계까지 {nxt - self.affection.points(pid)}점" if nxt is not None else " · 최고 단계예요!"
+        self.say(f"{self.persona.name}와의 사이: {name} {self.affection.hearts(pid)}{rest}", "shy" if index else "neutral")
+
+    def tell_fortune(self) -> None:
+        self.talk(f"오늘의 운세예요!\n{fortune_text(today_fortune(datetime.now().date(), self.persona.id))}", "happy")
+
+    # ----- opt-in PC watching (file names in Downloads; copied text, never stored) ---
+
+    def _downloads_loop(self) -> None:
+        try:
+            self._downloads_step()
+        finally:
+            self.after(DOWNLOADS_POLL_MS, self._downloads_loop)
+
+    def _downloads_step(self) -> None:
+        if not self.settings.downloads_watch or self.state() == "withdrawn" or self.busy or self.card.visible:
+            return
+        folder = resolve_folder("다운로드")
+        if folder is None:
+            return
+        options = rename_options(self.settings)
+        named = rule_pattern(options.rule) if options.skip_named else None
+        waiting = count_waiting(folder, options.extensions, named)
+        now = datetime.now()
+        self.downloads_nudge.threshold = self.settings.downloads_threshold
+        if self.settings.last_downloads_nudge == now.date().isoformat() or not self.downloads_nudge.due(now, waiting):
+            return
+        self.downloads_nudge.mark(now)
+        self._update_settings(last_downloads_nudge=now.date().isoformat())
+        result = self.toolbox.execute("rename_files", {"folder": "다운로드", "request": ""})
+        self.talk(downloads_line(waiting, bool(result.get("ok"))), "thinking")
+        self._show_tool_cards()
+
+    def _clipboard_loop(self) -> None:
+        try:
+            self._clipboard_step()
+        finally:
+            self.after(CLIPBOARD_POLL_MS, self._clipboard_loop)
+
+    def _clipboard_step(self) -> None:
+        if not self.settings.clipboard_watch:
+            return
+        try:
+            text = self.clipboard_get()
+        except tk.TclError:
+            return  # empty clipboard or not text
+        digest = hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()  # only a fingerprint is kept
+        if digest == self._last_clip:
+            return
+        now = time.monotonic()
+        if self.state() == "withdrawn" or self.busy or self.card.visible or now - self._last_clip_offer < CLIPBOARD_GAP_S:
+            return  # looked at again on a later poll
+        self._last_clip = digest
+        found = suggest(text, datetime.now())
+        del text
+        if found is None or (found.kind == "event" and found.when_text in DAY_WORDS_ONLY):
+            return  # "오늘 날씨 좋다" is not an appointment
+        self._last_clip_offer = now
+        if found.kind == "price":
+            result = self.toolbox.execute("add_price_watch", {"url": found.url})
+        else:
+            result = self.toolbox.execute("add_event", {"title": found.title, "when": found.when_text})
+        if result.get("ok"):
+            self.say(clipboard_line(found.kind, found.title, found.when_text), "thinking")
+            self._show_tool_cards()
+
+    def _show_tool_cards(self) -> None:
+        """Show confirm cards for actions a tool queued outside a chat turn (Downloads, clipboard)."""
+
+        actions = self.toolbox.take_pending()
+        if actions:
+            self.pending_actions = list(actions)
+            self._show_next_card()
 
     # ----- presence (Windows: time since the last input only) -----------------------
 
@@ -757,9 +900,10 @@ class MascotApp(tk.Tk):
 
     # ----- focus timer --------------------------------------------------------------
 
-    def start_focus(self, focus_minutes: int = 25, break_minutes: int = 5) -> None:
-        self.focus_timer.start(datetime.now(), focus_minutes, break_minutes)
-        self.talk(f"{focus_minutes}분 집중 시작! 끝나면 알려 줄게요.", "happy")
+    def start_focus(self, focus_minutes: int = 25, break_minutes: int = 5, cycles: int = 1) -> None:
+        self.focus_timer.start(datetime.now(), focus_minutes, break_minutes, cycles)
+        times = f" × {cycles}번" if cycles > 1 else ""
+        self.talk(f"{focus_minutes}분 집중{times} 시작! 끝나면 알려 줄게요.", "happy")
         self._draw_timer()
 
     def _tick_timer(self) -> None:
@@ -773,6 +917,8 @@ class MascotApp(tk.Tk):
         events = self.focus_timer.tick(now)
         for minutes in self.focus_timer.take_finished():
             self.focus_log.add(now, minutes)
+            if minutes >= MIN_FOCUS_FOR_POINTS:
+                self.gain("focus_done")
         for event in events:
             self.talk(*timer_line(self.persona, self.focus_timer, event))
             self.bell()
@@ -863,6 +1009,17 @@ class MascotApp(tk.Tk):
 
     def open_price_window(self) -> None:
         PriceWindow(self, self.watches, self.check_prices_now, lambda: bool(self._price_sources()))
+
+    def open_ai_settings(self) -> None:
+        def save(**changes: object) -> None:
+            self._update_settings(**changes)
+            threading.Thread(target=self._check_model, daemon=True).start()
+
+        AISettingsWindow(self, self.settings, lambda: OllamaClient(self.settings.ollama_url).list_models(), save)
+
+    def open_focus_dialog(self) -> None:
+        running = self.focus_timer.state(datetime.now()).phase is not None
+        FocusDialog(self, running, self.start_focus, self._stop_timer)
 
     def open_routine_settings(self) -> None:
         def save(**changes: object) -> None:

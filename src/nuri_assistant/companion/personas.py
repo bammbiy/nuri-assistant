@@ -45,11 +45,22 @@ class Persona:
     take_break: str = "{minutes}째 계속 하고 있어요. 잠깐 스트레칭하고 눈 좀 쉬어요."
     drink_water: str = "물 한 잔 마실 시간이에요!"
     wrapup: str = "오늘 하루를 정리해 볼게요."
+    # Closeness level-ups (친근, 가까움, 단짝) and special days: user's birthday, {days} together.
+    level_up: tuple[str, ...] = ("우리 조금 친해진 것 같아요!", "요즘 같이 있는 게 즐거워요.", "이제 단짝이에요. 앞으로도 잘 부탁해요!")
+    birthday: str = "생일 축하해요! 오늘은 특별한 날이에요!"
+    together: str = "우리 만난 지 {days}일째예요. 고마워요!"
     # VOICEVOX style id used for this character's Japanese voice (changeable in settings).
     voice_id: int = 8
 
-    def system_prompt(self, user_name: str = "", now: str = "", tools: bool = False, voice: bool = False) -> str:
+    def system_prompt(self, user_name: str = "", now: str = "", tools: bool = False, voice: bool = False,
+                      closeness: str = "", facts: tuple[str, ...] = ()) -> str:
         who = f"사용자의 이름은 '{user_name}'이다. " if user_name else ""
+        if closeness:
+            who += (f"사용자와의 친밀도는 '{closeness}' 단계다. 단계가 높을수록 조금 더 편하고 다정하게 말하되 "
+                    "캐릭터 말투와 부르는 말은 그대로 둔다. ")
+        if facts:
+            who += ("사용자가 확인해 저장한, 사용자에 대해 기억하는 것: " + " / ".join(facts)
+                    + ". 대화와 관련 있을 때만 자연스럽게 꺼내고, 목록을 읊지 않는다. ")
         when = f"현재 시각은 {now}이다. " if now else ""
         if tools:
             abilities = (
@@ -64,9 +75,12 @@ class Persona:
                 "'25분 집중 모드'처럼 집중하겠다고 하면 start_focus_timer를 쓴다. "
                 "폴더 파일 이름을 날짜_매체코드_페이지로 정리해 달라고 하면 rename_files에 폴더와 요청 문장을 그대로 넘기고, "
                 "결과의 예시 한두 개를 보여 준 뒤 확인 버튼을 눌러 달라고 한다. 되돌려 달라고 하면 undo_rename을 쓴다. "
+                "사용자가 알레르기·생일·좋아하는 것·직업·반려동물처럼 오래 기억할 만한 자기 이야기를 하면 remember_fact로 "
+                "기억해도 되는지 확인 카드를 띄우고, 잊어 달라고 하면 forget_fact를 쓴다. "
+                "운세를 물으면 today_fortune, 가위바위보를 하면 play_rps를 쓰고, 결과는 바꾸지 말고 캐릭터 말투로 전한다. "
             )
         else:
-            abilities = "지금 AI 모델은 도구 호출을 쓸 수 없어서 일정, 할 일, 최저가 알림, 타이머, 파일 정리를 직접 다룰 수 없다. "
+            abilities = "지금 AI 모델은 도구 호출을 쓸 수 없어서 일정, 할 일, 최저가 알림, 타이머, 파일 정리, 기억 수첩, 운세·가위바위보를 직접 다룰 수 없다. "
         if voice:
             abilities += (
                 "답변이 음성으로도 나간다. 한국어 답변을 다 쓴 뒤 맨 끝에, 같은 내용을 캐릭터 말투를 살린 자연스러운 "
@@ -127,6 +141,9 @@ PERSONAS: dict[str, Persona] = {
             take_break="선배, {minutes}째 계속 하고 계세요. 잠깐 스트레칭하고 눈 좀 쉬어요!",
             drink_water="선배, 물 한 잔 마실 시간이에요!",
             wrapup="선배, 오늘 하루 정리해 드릴게요!",
+            level_up=("선배, 저 요즘 선배랑 일하는 게 좀 편해졌어요!", "선배 옆에 있으면 저도 힘이 나요. 헤헤.", "선배는 이제 제 단짝이에요! 계속 같이 해요!"),
+            birthday="선배, 생일 축하드려요! 오늘 일정은 제가 다 챙길 테니 즐기세요!",
+            together="선배랑 만난 지 벌써 {days}일째예요! 앞으로도 잘 부탁드려요.",
             voice_id=8,  # VOICEVOX 春日部つむぎ
         ),
         Persona(
@@ -163,6 +180,9 @@ PERSONAS: dict[str, Persona] = {
             take_break="동생, {minutes}째 쉬지도 않았지? 누나 말 듣고 기지개 한 번 켜.",
             drink_water="동생, 물 한 잔 마시고 와. 누나가 기다릴게.",
             wrapup="동생, 오늘 하루 누나가 정리해 줄게.",
+            level_up=("동생, 요즘 누나 말 잘 듣네? 조금 예뻐 보여.", "동생이랑 있으면 누나도 기분이 좋아.", "이제 동생은 누나 사람이야. 알지?"),
+            birthday="생일 축하해, 동생. 오늘은 누나가 다 해 줄게.",
+            together="동생이랑 만난 지 {days}일이야. 시간 참 빠르다, 그치?",
             voice_id=17,  # VOICEVOX 九州そら セクシー
         ),
         Persona(
@@ -200,6 +220,9 @@ PERSONAS: dict[str, Persona] = {
             take_break="자기, 벌써 {minutes}째예요~ 잠깐 눈 감고 쉬어요.",
             drink_water="자기, 물 한 모금 마셔요~",
             wrapup="자기, 오늘 하루 같이 돌아봐요~",
+            level_up=("자기랑 있으면 마음이 편해져요~", "자기 목소리 들으면 유키도 힘이 나요.", "이제 자기는 유키의 제일 소중한 사람이에요~"),
+            birthday="자기, 생일 축하해요~ 오늘은 푹 쉬면서 행복하기로 해요.",
+            together="자기랑 만난 지 {days}일째예요~ 고마워요, 정말.",
             voice_id=23,  # VOICEVOX WhiteCUL ノーマル
         ),
         Persona(
@@ -229,6 +252,9 @@ PERSONAS: dict[str, Persona] = {
             take_break="{minutes}째 그러고 있잖아! 좀 일어나서 스트레칭이라도 해!",
             drink_water="물 마셔! ...쓰러지면 귀찮으니까 그런 거야!",
             wrapup="오늘 한 거 정리해 줄게. 고마운 줄 알아!",
+            level_up=("흥, 뭐... 너랑 있는 거 나쁘지 않아.", "너 요즘 좀 괜찮네. ...칭찬 아니거든!", "...단짝이라고 해 줄게. 특별히야, 특별히!"),
+            birthday="생, 생일 축하해! ...딱히 기억하고 있었던 건 아니거든!",
+            together="너랑 만난 지 {days}일이야. ...세고 있었던 건 아니야!",
             voice_id=6,  # VOICEVOX 四国めたん ツンツン
         ),
         Persona(
@@ -255,6 +281,9 @@ PERSONAS: dict[str, Persona] = {
             take_break="...{minutes}째야. 잠깐 쉬어.",
             drink_water="...물. 마셔.",
             wrapup="...오늘 정리.",
+            level_up=("...너랑 있는 거, 싫지 않아.", "...요즘, 기다려져. 너 오는 거.", "...단짝. 그렇게 불러도 돼."),
+            birthday="...생일 축하해. 오늘은, 특별히 다정하게 할게.",
+            together="...만난 지 {days}일. 기억하고 있었어.",
             voice_id=14,  # VOICEVOX 冥鳴ひまり
         ),
         Persona(
@@ -285,6 +314,9 @@ PERSONAS: dict[str, Persona] = {
             take_break="야야, {minutes}째 앉아 있잖아~ 같이 기지개 켜자!",
             drink_water="물 마실 타임~! 이거 완전 중요하거든?",
             wrapup="오늘 하루 정리 타임~! 우리 꽤 했다?",
+            level_up=("헤헤, 우리 다시 옛날처럼 친해진 느낌~!", "너랑 있으면 완전 텐션 올라간다니까?", "역시 우리 평생 단짝이지~! 약속!"),
+            birthday="생일 축하해~!! 오늘은 완전 네가 주인공이야!",
+            together="우리 다시 붙어 다닌 지 {days}일째~! 완전 대박이지?",
             voice_id=10,  # VOICEVOX 雨晴はう
         ),
         Persona(
@@ -308,6 +340,9 @@ PERSONAS: dict[str, Persona] = {
             take_break="주인님, {minutes}째 일하고 계세요. 잠시 쉬어 가시겠어요?",
             drink_water="주인님, 물 한 잔 준비해 드릴까요? 잊지 말고 드세요.",
             wrapup="주인님, 오늘 하루를 정리해 드리겠습니다.",
+            level_up=("주인님을 모시는 일이 점점 즐거워져요.", "주인님 곁에 있을 수 있어서 행복해요.", "앞으로도 평생 주인님 곁에서 모시겠습니다."),
+            birthday="주인님, 생신 축하드립니다! 오늘은 제가 정성껏 모실게요.",
+            together="주인님을 모신 지 {days}일째입니다. 늘 감사드려요.",
             voice_id=15,  # VOICEVOX 九州そら あまあま
         ),
         Persona(
@@ -331,6 +366,9 @@ PERSONAS: dict[str, Persona] = {
             take_break="{minutes}째 쉬지 않으셨네요. 우아함에는 휴식도 필요하답니다.",
             drink_water="물 한 잔 드세요. 제가 권하는 거니 영광으로 아세요.",
             wrapup="오늘 하루, 제가 정리해 드리죠.",
+            level_up=("당신, 생각보다 괜찮은 사람이군요.", "당신과의 시간이 제법 즐겁다는 걸 인정해 드리죠.", "당신은 이제 저의 특별한 사람이에요. 영광으로 아세요."),
+            birthday="생일 축하드려요. 오늘만큼은 당신이 주인공이랍니다.",
+            together="당신과 만난 지 {days}일째네요. 오호호, 기념해 드리죠.",
             voice_id=2,  # VOICEVOX 四国めたん ノーマル
         ),
     )

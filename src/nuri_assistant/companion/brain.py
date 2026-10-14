@@ -41,6 +41,7 @@ class Companion:
         clock: Callable[[], datetime] = datetime.now,
         tools: ToolBox | None = None,
         voice: bool = False,
+        context: Callable[[], tuple[str, tuple[str, ...]]] | None = None,
     ) -> None:
         self.persona = persona
         self.client = client
@@ -51,13 +52,17 @@ class Companion:
         self.clock = clock
         self.tools = tools
         self.voice = voice
+        # (closeness level name, remembered facts), read fresh for every message.
+        self.context = context
         # Turned off for the session if the model turns out not to support tool calls.
         self.tools_supported = tools is not None
 
     def build_messages(self, user_text: str) -> list[dict[str, str]]:
         now = self.clock()
         stamp = f"{now:%Y-%m-%d} ({WEEKDAYS[now.weekday()]}) {now:%H:%M}"
-        system = self.persona.system_prompt(self.user_name, stamp, tools=self.tools_supported, voice=self.voice)
+        closeness, facts = self.context() if self.context else ("", ())
+        system = self.persona.system_prompt(self.user_name, stamp, tools=self.tools_supported, voice=self.voice,
+                                            closeness=closeness, facts=facts)
         messages = [{"role": "system", "content": system}]
         messages.extend(
             {"role": row["role"], "content": row["content"]}

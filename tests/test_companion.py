@@ -60,6 +60,23 @@ class PersonaTest(unittest.TestCase):
                 for expression in EXPRESSIONS:
                     self.assertIn(f"[{expression}]", prompt)
 
+    def test_system_prompt_closeness_and_facts(self) -> None:
+        persona = get_persona("nuri")
+        prompt = persona.system_prompt("민수", "now", closeness="가까움", facts=("고양이 알레르기",))
+        self.assertIn("가까움", prompt)
+        self.assertIn("고양이 알레르기", prompt)
+        plain = persona.system_prompt("민수", "now")
+        self.assertNotIn("친밀도", plain)
+        self.assertNotIn("고양이 알레르기", plain)
+
+    def test_special_day_lines(self) -> None:
+        for persona_id, persona in PERSONAS.items():
+            with self.subTest(persona=persona_id):
+                self.assertEqual(len(persona.level_up), 3)
+                self.assertTrue(all(persona.level_up))
+                self.assertTrue(persona.birthday.strip())
+                self.assertIn("{days}", persona.together)
+
     def test_unknown_persona_falls_back_to_default(self) -> None:
         self.assertEqual(get_persona("missing").id, "nuri")
 
@@ -150,6 +167,17 @@ class CompanionTest(unittest.TestCase):
             self.assertEqual([message["role"] for message in client.messages], ["system", "user", "assistant", "user"])
             self.assertEqual(store.recent("akane"), [])
 
+    def test_context_goes_into_system_message(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = ConversationStore(Path(tmp) / "companion.sqlite3")
+            companion = Companion(get_persona("nuri"), FakeClient([]), store, "qwen3:8b",
+                                  context=lambda: ("친근", ("고양이 알레르기",)))
+
+            system = companion.build_messages("안녕")[0]["content"]
+
+            self.assertIn("친근", system)
+            self.assertIn("고양이 알레르기", system)
+
     def test_failed_reply_is_not_saved(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = ConversationStore(Path(tmp) / "companion.sqlite3")
@@ -182,6 +210,20 @@ class SettingsTest(unittest.TestCase):
             settings = load_settings(path)
 
             self.assertEqual((settings.persona_id, settings.user_name, settings.x, settings.y), ("reika", "민수", 10, 20))
+
+    def test_new_defaults_and_old_file_without_them(self) -> None:
+        defaults = CompanionSettings()
+        self.assertEqual((defaults.user_birthday, defaults.first_met, defaults.last_occasion), ("", "", ""))
+        self.assertEqual((defaults.downloads_watch, defaults.downloads_threshold, defaults.clipboard_watch), (False, 10, False))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "companion.json"
+            path.write_text(json.dumps({"user_name": "민수"}, ensure_ascii=False), encoding="utf-8")
+
+            settings = load_settings(path)
+
+            self.assertEqual(settings.user_name, "민수")
+            self.assertEqual((settings.downloads_watch, settings.downloads_threshold, settings.clipboard_watch), (False, 10, False))
+            self.assertEqual(settings.user_birthday, "")
 
     def test_broken_file_uses_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

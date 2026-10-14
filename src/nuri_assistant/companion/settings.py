@@ -50,6 +50,15 @@ class CompanionSettings:
     away_minutes: int = 30
     break_reminder_minutes: int = 60
     water_reminder_minutes: int = 90
+    # Special days: the user's birthday "MM-DD" and the first day with the app (set on first start).
+    user_birthday: str = ""
+    first_met: str = ""
+    last_occasion: str = ""
+    # Opt-in PC watching: nudge when documents pile up in Downloads; suggest from copied text.
+    downloads_watch: bool = False
+    downloads_threshold: int = 10
+    clipboard_watch: bool = False
+    last_downloads_nudge: str = ""
     x: int | None = None
     y: int | None = None
 

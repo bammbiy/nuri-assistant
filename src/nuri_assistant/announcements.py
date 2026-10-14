@@ -127,3 +127,30 @@ def compose_wrapup(persona: Persona, focus: tuple[int, int], done: list[Todo], t
     else:
         parts.append("· 내일은 일정이 없어요.")
     return "\n".join(parts), persona.wrapup
+
+
+def level_up_line(persona: Persona, level: int) -> tuple[str, str]:
+    """(text, expression) when closeness reaches level 1-3 (친근, 가까움, 단짝)."""
+
+    lines = persona.level_up
+    return lines[min(max(level, 1), len(lines)) - 1], "shy"
+
+
+def occasion_line(persona: Persona, kind: str, days: int) -> tuple[str, str]:
+    """(text, expression) for the user's birthday or a days-together milestone."""
+
+    if kind == "birthday":
+        return persona.birthday, "happy"
+    return persona.together.format(days=days), "happy"
+
+
+def downloads_line(count: int, has_preview: bool) -> str:
+    if has_preview:
+        return f"다운로드 폴더에 정리 안 된 파일이 {count}개 쌓였어요. 아래처럼 정리해 둘까요?"
+    return f"다운로드 폴더에 정리 안 된 파일이 {count}개 쌓였어요. 정리하려면 매체코드랑 같이 말해 주세요."
+
+
+def clipboard_line(kind: str, title: str, when: str) -> str:
+    if kind == "price":
+        return "복사한 상품 링크, 가격 내려가면 알려 드릴까요? 아래에서 골라 주세요."
+    return f"복사한 내용에 날짜가 있어요. '{title}' {when} 일정으로 넣을까요?"
