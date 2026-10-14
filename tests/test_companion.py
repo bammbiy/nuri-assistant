@@ -81,6 +81,19 @@ class PersonaTest(unittest.TestCase):
         self.assertEqual(get_persona("missing").id, "nuri")
 
 
+class PersonaInteractionLinesTest(unittest.TestCase):
+    def test_lines_are_plain_text(self) -> None:
+        for persona_id, persona in PERSONAS.items():
+            for field in ("idle_talk", "pats", "pokes_many"):
+                lines = getattr(persona, field)
+                self.assertIsInstance(lines, tuple, (persona_id, field))
+                self.assertTrue(lines, (persona_id, field))
+                for line in lines:
+                    self.assertIsInstance(line, str)
+                    self.assertTrue(line.strip(), (persona_id, field))
+                    self.assertNotIn("{", line, (persona_id, field))
+
+
 class ReplyParserTest(unittest.TestCase):
     def test_strips_tag_split_across_chunks(self) -> None:
         parser = ReplyParser()
@@ -224,6 +237,20 @@ class SettingsTest(unittest.TestCase):
             self.assertEqual(settings.user_name, "민수")
             self.assertEqual((settings.downloads_watch, settings.downloads_threshold, settings.clipboard_watch), (False, 10, False))
             self.assertEqual(settings.user_birthday, "")
+
+    def test_interaction_defaults_and_old_file(self) -> None:
+        def check(settings: CompanionSettings) -> None:
+            self.assertEqual(settings.chatter, "보통")
+            self.assertEqual((settings.notify_welcome, settings.notify_level_up, settings.notify_occasion), (True, True, True))
+            self.assertTrue(settings.fullscreen_quiet)
+            self.assertFalse(settings.privacy_shown)
+
+        check(CompanionSettings())
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "companion.json"
+            path.write_text(json.dumps({"user_name": "민수"}, ensure_ascii=False), encoding="utf-8")
+
+            check(load_settings(path))
 
     def test_broken_file_uses_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

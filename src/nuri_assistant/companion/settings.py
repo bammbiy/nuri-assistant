@@ -59,6 +59,15 @@ class CompanionSettings:
     downloads_threshold: int = 10
     clipboard_watch: bool = False
     last_downloads_nudge: str = ""
+    # How chatty the character is on her own ("많이"/"보통"/"조금"/"끄기" idle talk) and which
+    # optional lines she says. Schedule, to-do, timer and price alerts are never silenced here.
+    chatter: str = "보통"
+    notify_welcome: bool = True
+    notify_level_up: bool = True
+    notify_occasion: bool = True
+    # A full-screen app in front (game, video): no optional lines and no re-raising over it.
+    fullscreen_quiet: bool = True
+    privacy_shown: bool = False
     x: int | None = None
     y: int | None = None
 

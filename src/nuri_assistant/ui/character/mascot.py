@@ -35,7 +35,7 @@ from ...crashlog import log_exception
 from ...paths import APP_DIR, ASSETS_DIR, SETTINGS_PATH, USER_CHARACTERS
 from ...fun import fortune_text, occasion_today, today_fortune
 from ...pcwatch import DownloadNudge, count_waiting, suggest
-from ...presence import PresenceTracker, idle_seconds
+from ...presence import ClickCombo, IdleChatter, PatDetector, PresenceTracker, foreground_fullscreen, idle_seconds
 from ...pricewatch import CheckResult, WatchAction
 from ...routine import daily_due, parse_clock
 from ...screen import Rect, all_monitors, default_position, is_reachable, work_area
@@ -51,6 +51,7 @@ from ..windows.focus_dialog import FocusDialog
 from ..windows.memos import MemoWindow
 from ..windows.price import PriceWindow
 from ..windows.price_settings import PriceSettingsWindow
+from ..windows.privacy import PrivacyWindow
 from ..windows.rename_preview import RenamePreviewWindow
 from ..windows.rename_settings import RenameSettingsWindow
 from ..windows.routine_settings import RoutineSettingsWindow
@@ -99,6 +100,11 @@ ROUTINE_GAP_S = 60         # a special-day line waits this long after a briefing
 DOWNLOADS_POLL_MS = 600_000  # opt-in Downloads check (file names only)
 CLIPBOARD_POLL_MS = 2000     # opt-in clipboard check (text is never stored)
 CLIPBOARD_GAP_S = 60         # at most one clipboard suggestion a minute
+CHATTER_POLL_MS = 30_000     # idle talk / idle glance check
+GLANCE_GAP_S = (180, 420)    # now and then a quiet change of face, no words
+GLANCE_MS = 2500
+HEAD_SHARE = 0.35            # top part of the character counted as the head (pats)
+PRIVACY_DELAY_MS = 2500      # first start: privacy notice after the greeting
 DAY_WORDS_ONLY = {"오늘", "내일", "모레", "글피", "내일모레"}  # a bare day word is not an appointment
 WRAPUP_WINDOW = timedelta(hours=3)  # an app started later than this after the wrap-up time skips it
 FIRST_BLINK_MS = 3500
@@ -165,6 +171,11 @@ class MascotApp(tk.Tk):
         self.mouth_open = False
         self.blinking = False
         self.busy = False
+        self.chatter = IdleChatter(self.settings.chatter)
+        self.chatter.reset(datetime.now())
+        self.pat, self.combo = PatDetector(), ClickCombo()
+        self._fullscreen = False
+        self._next_glance = time.monotonic() + random.uniform(*GLANCE_GAP_S)
         self.downloads_nudge = DownloadNudge(self.settings.downloads_threshold)
         self._last_clip: str | None = None
         self._last_routine_line = time.monotonic()  # start-up greeting counts as one
@@ -194,6 +205,9 @@ class MascotApp(tk.Tk):
         self.after(ROUTINE_POLL_MS, self._routine_loop)
         self.after(DOWNLOADS_POLL_MS, self._downloads_loop)
         self.after(CLIPBOARD_POLL_MS, self._clipboard_loop)
+        self.after(CHATTER_POLL_MS, self._chatter_loop)
+        if not self.settings.privacy_shown:
+            self.after(PRIVACY_DELAY_MS, self._first_privacy_notice)
         self.after(FIRST_PRICE_CHECK_MS, self._price_loop)
         self.after(FIRST_BLINK_MS, self._blink)
         self.after(POINTER_POLL_MS, self._watch_pointer)
@@ -277,6 +291,7 @@ class MascotApp(tk.Tk):
         self.canvas.tag_bind("character", "<ButtonPress-1>", self._on_press)
         self.canvas.tag_bind("character", "<B1-Motion>", self._on_drag)
         self.canvas.tag_bind("character", "<ButtonRelease-1>", self._on_release)
+        self.canvas.bind("<Motion>", self._on_motion, add="+")
         self.canvas.tag_bind("bubble", "<Button-1>", lambda _event: self._bubble_clicked())
         self.canvas.bind("<Button-3>", self._show_menu)
         if sys.platform == "darwin":
@@ -313,6 +328,7 @@ class MascotApp(tk.Tk):
         self.menu.add_command(label="대화 기록 보기", command=self.show_log)
         self.menu.add_command(label="기억 수첩", command=lambda: MemoWindow(self, self.memos))
         self.menu.add_command(label="우리 사이", command=self.show_closeness)
+        self.menu.add_command(label="개인정보 안내", command=lambda: PrivacyWindow(self))
         self.menu.add_command(label="오늘의 운세", command=self.tell_fortune)
         self.menu.add_command(label="이 캐릭터의 기억 지우기", command=self.clear_memory)
         self.menu.add_separator()
@@ -354,9 +370,30 @@ class MascotApp(tk.Tk):
             x, y = default_position(self._work_area(), WIDTH, self.winfo_height())
             self.geometry(f"+{x}+{y}")
             self._update_settings(x=x, y=y)
+        was_fullscreen, self._fullscreen = self._fullscreen, self._check_fullscreen()
+        if self._fullscreen:
+            if not was_fullscreen:
+                self.attributes("-topmost", False)  # let the game or video cover us; back when it ends
+            return
         # Not while our own windows are open: re-raising would cover them.
         if not any(isinstance(w, tk.Toplevel) and w.winfo_viewable() for w in self.winfo_children()):
             self.attributes("-topmost", True)
+
+    def _check_fullscreen(self) -> bool:
+        if not self.settings.fullscreen_quiet:
+            return False
+        own = {self.winfo_id()}
+        try:
+            own.add(int(self.wm_frame(), 16))
+        except (tk.TclError, ValueError):
+            pass
+        return bool(foreground_fullscreen(own))
+
+    def _optional_ok(self) -> bool:
+        """Optional lines (idle talk, greetings, level-ups, suggestions) wait while the user is busy
+        with something else; schedule, to-do, timer and price alerts are never held back."""
+
+        return not (self._fullscreen or self.busy or self.card.visible or self.state() == "withdrawn")
 
     def _on_press(self, event: tk.Event) -> None:
         self._drag_start = (event.x_root, event.y_root, self.winfo_x(), self.winfo_y())
@@ -377,8 +414,22 @@ class MascotApp(tk.Tk):
         if self._dragged:
             self._update_settings(x=self.winfo_x(), y=self.winfo_y())
         elif not self.busy:
-            self.talk(random.choice(self.persona.pokes), random.choice(("surprised", "shy", "happy")))
+            if self.combo.click(time.monotonic()):
+                self.talk(random.choice(self.persona.pokes_many), "angry")
+            else:
+                self.talk(random.choice(self.persona.pokes), random.choice(("surprised", "shy", "happy")))
             self.chat.focus()
+
+    def _on_motion(self, event: tk.Event) -> None:
+        """Rubbing the pointer back and forth over the head (no button) is a pat."""
+
+        box = self.canvas.bbox("character")
+        on_head = (box is not None and event.state & 0x0100 == 0
+                   and box[0] <= event.x <= box[2] and box[1] <= event.y <= box[1] + (box[3] - box[1]) * HEAD_SHARE)
+        if not on_head:
+            self.pat.reset()
+        elif self.pat.feed(event.x, time.monotonic()) and not self.busy:
+            self.talk(random.choice(self.persona.pats), "shy")
 
     def _show_menu(self, event: tk.Event) -> None:
         self.menu.tk_popup(event.x_root, event.y_root)
@@ -497,6 +548,7 @@ class MascotApp(tk.Tk):
     # ----- speech bubble ----------------------------------------------------------
 
     def say(self, text: str, expression: str | None = None) -> None:
+        self.chatter.reset(datetime.now())  # idle talk never comes right after another line
         if expression:
             self.set_expression(expression)
             self._relax_later(RELAX_BASE_MS + min(len(text) * RELAX_PER_CHAR_MS, RELAX_MAX_EXTRA_MS))
@@ -710,7 +762,7 @@ class MascotApp(tk.Tk):
         if not force:
             clock = parse_clock(self.settings.briefing_time)
             due = daily_due(now, clock, self.settings.last_briefing) if clock else self.settings.last_briefing != today
-            if not due:
+            if not due or self._fullscreen:  # behind a game: _routine_step brings it later
                 return
             self._update_settings(last_briefing=today)
         if self.settings.weather_lat is not None and self.settings.weather_lon is not None:
@@ -763,20 +815,50 @@ class MascotApp(tk.Tk):
             self.after(ROUTINE_POLL_MS, self._routine_loop)
 
     def _routine_step(self) -> None:
-        if self.state() == "withdrawn" or self.busy or self.card.visible:
+        # Full screen: wait, so the briefing and wrap-up are not used up behind a game.
+        if not self._optional_ok():
             return
         now = datetime.now()
         clock = parse_clock(self.settings.briefing_time)
         # One routine line per poll, so a late start does not put the wrap-up over the briefing.
-        if clock and daily_due(now, clock, self.settings.last_briefing):
+        briefing_due = (daily_due(now, clock, self.settings.last_briefing) if clock
+                        else self.settings.last_briefing != now.date().isoformat())
+        if briefing_due:
             self.brief_today()
         elif daily_due(now, parse_clock(self.settings.wrapup_time), self.settings.last_wrapup, WRAPUP_WINDOW):
             self.wrap_up()
-        elif self.settings.last_occasion != now.date().isoformat() and time.monotonic() - self._last_routine_line >= ROUTINE_GAP_S:
+        elif (self.settings.notify_occasion and self.settings.last_occasion != now.date().isoformat()
+              and time.monotonic() - self._last_routine_line >= ROUTINE_GAP_S):
             self._update_settings(last_occasion=now.date().isoformat())
             occasion = occasion_today(now.date(), self.settings.user_birthday, self.settings.first_met)
             if occasion:
                 self.talk(*occasion_line(self.persona, occasion.kind, occasion.days))
+
+    # ----- idle talk and glances ------------------------------------------------------
+
+    def _chatter_loop(self) -> None:
+        try:
+            self._chatter_step()
+        finally:
+            self.after(CHATTER_POLL_MS, self._chatter_loop)
+
+    def _chatter_step(self) -> None:
+        if not self._optional_ok() or self.talking or self.chat.focused():
+            return
+        now = datetime.now()
+        if self.chatter.due(now):
+            self.talk(random.choice(self.persona.idle_talk), random.choice(("happy", "neutral", "thinking")))
+            self.chatter.spoke(now)
+        elif time.monotonic() >= self._next_glance and self.expression == "neutral":
+            self._next_glance = time.monotonic() + random.uniform(*GLANCE_GAP_S)
+            self.set_expression(random.choice(("happy", "thinking", "shy")))
+            self._relax_later(GLANCE_MS)
+
+    def _first_privacy_notice(self) -> None:
+        if self.state() == "withdrawn":  # still picking a character
+            self.after(PRIVACY_DELAY_MS, self._first_privacy_notice)
+            return
+        PrivacyWindow(self, lambda: self._update_settings(privacy_shown=True))
 
     # ----- closeness, fortune --------------------------------------------------------
 
@@ -794,7 +876,9 @@ class MascotApp(tk.Tk):
     def _say_level_up(self, persona, level: int) -> None:
         if persona is not self.persona:
             return  # switched characters meanwhile
-        if self.busy or self.card.visible:
+        if not self.settings.notify_level_up:
+            return
+        if not self._optional_ok():
             self.after(LEVEL_UP_DELAY_MS, lambda: self._say_level_up(persona, level))
             return
         self.talk(*level_up_line(persona, level))
@@ -818,7 +902,7 @@ class MascotApp(tk.Tk):
             self.after(DOWNLOADS_POLL_MS, self._downloads_loop)
 
     def _downloads_step(self) -> None:
-        if not self.settings.downloads_watch or self.state() == "withdrawn" or self.busy or self.card.visible:
+        if not self.settings.downloads_watch or not self._optional_ok():
             return
         folder = resolve_folder("다운로드")
         if folder is None:
@@ -853,7 +937,7 @@ class MascotApp(tk.Tk):
         if digest == self._last_clip:
             return
         now = time.monotonic()
-        if self.state() == "withdrawn" or self.busy or self.card.visible or now - self._last_clip_offer < CLIPBOARD_GAP_S:
+        if not self._optional_ok() or now - self._last_clip_offer < CLIPBOARD_GAP_S:
             return  # looked at again on a later poll
         self._last_clip = digest
         found = suggest(text, datetime.now())
@@ -893,8 +977,10 @@ class MascotApp(tk.Tk):
             return
         now = datetime.now()
         focusing = self.focus_timer.state(now).phase == "focus"
-        quiet = self.state() == "withdrawn" or self.busy or self.card.visible or focusing
+        quiet = not self._optional_ok() or focusing
         for index, (kind, minutes) in enumerate(self.presence.update(now, idle, quiet)):
+            if kind == "welcome_back" and not self.settings.notify_welcome:
+                continue
             line = presence_line(self.persona, kind, minutes)
             self.after(index * SECOND_LINE_GAP_MS, lambda line=line: self.talk(*line))
 
@@ -1026,6 +1112,7 @@ class MascotApp(tk.Tk):
             self._update_settings(**changes)
             self.presence.configure(self.settings.away_minutes, self.settings.break_reminder_minutes,
                                     self.settings.water_reminder_minutes)
+            self.chatter.set_level(self.settings.chatter)
 
         RoutineSettingsWindow(self, self.settings, save)
 

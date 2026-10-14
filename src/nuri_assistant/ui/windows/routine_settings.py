@@ -13,6 +13,14 @@ from ...weather import WeatherError, geocode
 from ..theme import BG, DANGER, FONT, SUBTLE, TEXT, button, entry
 
 POLL_MS = 100
+MAX_BODY_HEIGHT = 580
+CHATTER_CHOICES = ("많이", "보통", "조금", "끄기")
+NOTIFY_CHOICES = (
+    ("notify_welcome", "돌아왔을 때 인사"),
+    ("notify_level_up", "친해졌을 때 한마디"),
+    ("notify_occasion", "생일·기념일 축하"),
+    ("fullscreen_quiet", "전체 화면(게임·영상)일 때는 조용히, 위로 올라오지도 않기"),
+)
 
 
 class RoutineSettingsWindow(tk.Toplevel):
@@ -28,8 +36,16 @@ class RoutineSettingsWindow(tk.Toplevel):
         self.on_save = on_save
         self._results: queue.Queue = queue.Queue()
 
-        body = tk.Frame(self, bg=BG)
-        body.pack(fill="both", expand=True, padx=24, pady=20)
+        # Scrollable middle so the window fits small screens; buttons stay pinned below.
+        outer = tk.Frame(self, bg=BG)
+        outer.pack(side="bottom", fill="x", padx=24, pady=(0, 16))
+        self._canvas = tk.Canvas(self, bg=BG, highlightthickness=0, bd=0)
+        self._canvas.pack(side="left", fill="both", expand=True)
+        self._bar = tk.Scrollbar(self, orient="vertical", command=self._canvas.yview)
+        self._canvas.configure(yscrollcommand=self._bar.set)
+        body = tk.Frame(self._canvas, bg=BG)
+        self._canvas.create_window((24, 20), window=body, anchor="nw")
+        body.bind("<Configure>", self._fit_body)
         tk.Label(body, text="생활 알림 설정", font=(FONT, 16, "bold"), bg=BG, fg=TEXT).pack(anchor="w")
         tk.Label(body, text="비서가 먼저 말을 거는 때를 정해요. 시각은 08:30처럼 적어요.",
                  font=(FONT, 9), bg=BG, fg=SUBTLE).pack(anchor="w", pady=(2, 6))
@@ -41,6 +57,23 @@ class RoutineSettingsWindow(tk.Toplevel):
         month, _, day = settings.user_birthday.partition("-")
         birthday = f"{int(month)}월 {int(day)}일" if month.isdigit() and day.isdigit() else ""
         self.birthday = self._row(body, "내 생일", birthday, "예: 3월 14일 (그날 비서가 축하해요)", width=10)
+
+        self._section(body, "먼저 말 걸기")
+        chatter_row = tk.Frame(body, bg=BG)
+        chatter_row.pack(fill="x", pady=3)
+        tk.Label(chatter_row, text="혼잣말 빈도", width=12, anchor="w", font=(FONT, 10), bg=BG, fg=TEXT).pack(side="left")
+        self.chatter = tk.StringVar(value=settings.chatter)
+        for label in CHATTER_CHOICES:
+            tk.Radiobutton(chatter_row, text=label, value=label, variable=self.chatter, font=(FONT, 10), bg=BG, fg=TEXT,
+                           activebackground=BG, selectcolor="#ffffff", highlightthickness=0, bd=0).pack(side="left", padx=(0, 8))
+        tk.Label(body, text="가만히 있을 때 가끔 혼잣말을 해요. 일정·할 일·타이머 알림은 빈도와 상관없이 꼭 알려요.",
+                 font=(FONT, 9), bg=BG, fg=SUBTLE, wraplength=460, justify="left").pack(anchor="w", pady=(0, 4))
+        self.notify_vars: dict[str, tk.BooleanVar] = {}
+        for key, text in NOTIFY_CHOICES:
+            var = tk.BooleanVar(value=bool(getattr(settings, key)))
+            self.notify_vars[key] = var
+            tk.Checkbutton(body, text=text, variable=var, font=(FONT, 10), bg=BG, fg=TEXT, activebackground=BG,
+                           selectcolor="#ffffff", highlightthickness=0, bd=0, anchor="w").pack(fill="x")
 
         self._section(body, "자리 비움·건강")
         self.presence = tk.BooleanVar(value=settings.presence_enabled)
@@ -65,14 +98,39 @@ class RoutineSettingsWindow(tk.Toplevel):
         tk.Label(body, text="복사한 글은 저장하지 않고, 확인 카드를 눌러야 등록돼요. 긴 글·비밀번호 같은 글은 보지 않아요.",
                  font=(FONT, 9), bg=BG, fg=SUBTLE).pack(anchor="w")
 
-        self.notice = tk.Label(body, text="", font=(FONT, 9), bg=BG, fg=DANGER, anchor="w", justify="left")
-        self.notice.pack(fill="x", pady=(10, 0))
-        actions = tk.Frame(body, bg=BG)
-        actions.pack(fill="x", pady=(8, 0))
+        self.notice = tk.Label(outer, text="", font=(FONT, 9), bg=BG, fg=DANGER, anchor="w", justify="left")
+        self.notice.pack(fill="x", pady=(6, 0))
+        actions = tk.Frame(outer, bg=BG)
+        actions.pack(fill="x", pady=(6, 0))
         self.save_button = button(actions, "저장", self._save)
         self.save_button.pack(side="right")
         button(actions, "취소", self.destroy, primary=False).pack(side="right", padx=6)
         self.bind("<Escape>", lambda _event: self.destroy())
+        self._bind_wheel(self._canvas)
+        self._bind_wheel(body)
+
+    def _fit_body(self, _event: object = None) -> None:
+        body = self._canvas.winfo_children()[0]
+        width, height = body.winfo_reqwidth() + 48, body.winfo_reqheight() + 40
+        shown = min(height, MAX_BODY_HEIGHT)
+        self._canvas.configure(width=width, height=shown, scrollregion=(0, 0, width, height))
+        if height > shown:
+            self._bar.pack(side="right", fill="y", before=self._canvas)
+        else:
+            self._bar.pack_forget()
+
+    def _bind_wheel(self, widget: tk.Misc) -> None:
+        """Wheel scrolling on the widget and every descendant (labels and entries would otherwise swallow it)."""
+        widget.bind("<MouseWheel>", lambda e: self._scroll(-1 if e.delta > 0 else 1), add="+")
+        widget.bind("<Button-4>", lambda _e: self._scroll(-1), add="+")
+        widget.bind("<Button-5>", lambda _e: self._scroll(1), add="+")
+        for child in widget.winfo_children():
+            self._bind_wheel(child)
+
+    def _scroll(self, step: int) -> None:
+        body = self._canvas.winfo_children()[0]
+        if body.winfo_reqheight() + 40 > self._canvas.winfo_height():
+            self._canvas.yview_scroll(step, "units")
 
     def _section(self, parent: tk.Misc, title: str) -> None:
         tk.Label(parent, text=title, font=(FONT, 11, "bold"), bg=BG, fg=TEXT).pack(anchor="w", pady=(14, 4))
@@ -127,6 +185,8 @@ class RoutineSettingsWindow(tk.Toplevel):
                 water_reminder_minutes=self._minutes(self.water, "물 마시기 알림"),
                 clipboard_watch=self.clipboard.get(),
                 user_birthday=self._birthday(),
+                chatter=self.chatter.get(),
+                **{key: var.get() for key, var in self.notify_vars.items()},
             )
         except ValueError as exc:
             self.notice.configure(text=str(exc))
