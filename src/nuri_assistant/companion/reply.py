@@ -9,7 +9,7 @@ _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
 _JA_BLOCK = re.compile(r"<ja>(.*?)</ja>", re.DOTALL)
 # Markup that may arrive split across chunks; a trailing prefix of these is held back.
 _PARTIAL_MARKUP = ("<think>", "<ja>", "</ja>")
-_SENTENCE_END = "。！？!?♪…"
+_SENTENCE_END = "。！？!?♪"  # not "…": "えっと…それは" stays one line
 _CLOSERS = "」』）)\"'”’"
 _TAG = re.compile(r"\[\s*([^\[\]\s]{1,10})\s*\]")
 _ALIASES = {

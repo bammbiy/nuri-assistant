@@ -25,6 +25,9 @@ class CompanionReply:
     actions: tuple[Any, ...] = ()
     # Japanese line for text-to-speech (empty unless voice is on and the model wrote one).
     voice: str = ""
+    # True when the kept round's Japanese already went out sentence by sentence through on_voice;
+    # otherwise the caller speaks `voice` (or a translation) after the reply as before.
+    voiced: bool = False
 
 
 class Companion:
@@ -89,8 +92,16 @@ class Companion:
         if not text:
             raise ValueError("메시지를 입력하세요.")
         messages: list[dict] = self.build_messages(text)
-        visible, expression, spoken = "", "neutral", ""
+        visible, expression, spoken, voiced = "", "neutral", "", False
+        emitted = [0]  # sentences sent to on_voice in the current round
+
+        def counted(sentence: str) -> None:
+            emitted[0] += 1
+            on_voice(sentence)
+
+        speak_now = counted if on_voice is not None else None
         for _round in range(MAX_TOOL_ROUNDS):
+            emitted[0] = 0
             tools = self.tools.specs if self.tools_supported and self.tools is not None else None
             parser = ReplyParser(default_expression=expression)
             calls: list[ToolCall] = []
@@ -102,16 +113,17 @@ class Companion:
                     shown = parser.feed(item)
                     if on_update is not None and shown:
                         on_update(shown, parser.expression)
-                    self._emit_voice(parser, on_voice, False)
+                    self._emit_voice(parser, speak_now, False)
             except OllamaToolsUnsupported:
                 self.tools_supported = False
                 messages[0] = self.build_messages(text)[0]
+                if emitted[0]:
+                    speak_now = None  # the retry would say the same sentences again; speak at the end instead
                 continue
             round_text = parser.finish()
+            self._emit_voice(parser, speak_now, True)
             if round_text:
-                self._emit_voice(parser, on_voice, True)
-            if round_text:
-                visible, expression, spoken = round_text, parser.expression, parser.voice
+                visible, expression, spoken, voiced = round_text, parser.expression, parser.voice, emitted[0] > 0
             if not calls or self.tools is None:
                 break
             messages.append({
@@ -126,10 +138,11 @@ class Companion:
         actions = tuple(self.tools.take_pending()) if self.tools is not None else ()
         if not visible:
             visible = "아래에서 확인해 주세요." if actions else "..."
+            voiced = emitted[0] > 0  # a voice-only answer was already spoken; don't say it again
         self.store.add(self.persona.id, "user", text)
         # Keep the tag in memory so the model sees its own format in the history.
         self.store.add(self.persona.id, "assistant", f"[{expression}] {visible}")
-        return CompanionReply(visible, expression, actions, spoken)
+        return CompanionReply(visible, expression, actions, spoken, voiced)
 
     @staticmethod
     def _emit_voice(parser: ReplyParser, on_voice: Callable[[str], None] | None, final: bool) -> None:

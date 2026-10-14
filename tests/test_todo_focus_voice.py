@@ -329,7 +329,7 @@ class VoiceStreamingTest(unittest.TestCase):
         stream.join(5)
         self.assertEqual(played, [b"a", b"b"])
         self.assertEqual(stream.count, 2)
-        self.assertEqual(events, ["start", "end", "start", "end"])
+        self.assertEqual(events, ["start", "end"])  # once around the whole line, so the mouth keeps moving
 
     def test_stale_stream_drops_parts(self) -> None:
         played: list[bytes] = []
@@ -340,6 +340,103 @@ class VoiceStreamingTest(unittest.TestCase):
         stream.close()
         stream.join(5)
         self.assertEqual(played, [b"new"])
+
+    def test_ellipsis_does_not_end_sentence(self) -> None:
+        parser = ReplyParser()
+        got: list[str] = []
+        for ch in "<ja>えっと…それは大丈夫。</ja>":
+            parser.feed(ch)
+            got.extend(parser.take_voice())
+        got.extend(parser.take_voice(final=True))
+        self.assertEqual(got, ["えっと…それは大丈夫。"])
+
+    def _rounds_reply(self, rounds, on_voice, tools=True):
+        class FakeTools:
+            specs = [{"type": "function", "function": {"name": "t"}}]
+
+            def execute(self, name, arguments):
+                return {"ok": True}
+
+            def take_pending(self):
+                return []
+
+        class Client:
+            def __init__(self):
+                self.n = 0
+
+            def chat_stream(self, _model, messages, options=None, tools=None):
+                items = rounds[min(self.n, len(rounds) - 1)]
+                self.n += 1
+                yield from items
+
+        with tempfile.TemporaryDirectory() as tmp:
+            companion = Companion(get_persona("nuri"), Client(), ConversationStore(Path(tmp) / "c.sqlite3"), "m",
+                                  voice=True, tools=FakeTools() if tools else None)
+            return companion.reply("go", on_voice=on_voice)
+
+    def test_voiced_when_streamed(self) -> None:
+        voices: list[str] = []
+        reply = self._rounds_reply([list("[happy] 좋아 <ja>よし。いこう！</ja>")], voices.append, tools=False)
+        self.assertTrue(reply.voiced)
+        self.assertEqual(voices, ["よし。", "いこう！"])
+
+    def test_voiced_false_when_final_round_has_no_japanese(self) -> None:
+        from src.nuri_assistant.companion.llm import ToolCall
+
+        voices: list[str] = []
+        rounds = [
+            ["확인할게요 <ja>確認しますね。</ja>", ToolCall("t", {})],
+            ["[happy] 확인했어요."],
+        ]
+        reply = self._rounds_reply(rounds, voices.append)
+        self.assertEqual(reply.text, "확인했어요.")
+        self.assertFalse(reply.voiced)
+        self.assertEqual(voices, ["確認しますね。"])
+
+    def test_voiced_true_when_final_round_has_japanese(self) -> None:
+        from src.nuri_assistant.companion.llm import ToolCall
+
+        voices: list[str] = []
+        rounds = [
+            ["확인할게요 <ja>確認しますね。</ja>", ToolCall("t", {})],
+            ["확인했어요. <ja>できました。</ja>"],
+        ]
+        reply = self._rounds_reply(rounds, voices.append)
+        self.assertTrue(reply.voiced)
+        self.assertEqual(voices, ["確認しますね。", "できました。"])
+
+    def test_empty_visible_text_still_flushes_unterminated_japanese(self) -> None:
+        voices: list[str] = []
+        reply = self._rounds_reply([["<ja>うん</ja>"]], voices.append, tools=False)
+        self.assertEqual(voices, ["うん"])
+        self.assertTrue(reply.voiced)  # already spoken; the UI must not say it again
+
+    def test_voiced_false_without_on_voice(self) -> None:
+        reply = self._rounds_reply([["좋아 <ja>よし。</ja>"]], None, tools=False)
+        self.assertFalse(reply.voiced)
+        self.assertEqual(reply.voice, "よし。")
+
+    def test_empty_stream_calls_no_events_and_threads_end(self) -> None:
+        events: list[str] = []
+        stream = self._speaker([], events).stream(1)
+        stream.close()
+        stream.join(2)
+        self.assertFalse(stream._synth_thread.is_alive())
+        self.assertFalse(stream._play_thread.is_alive())
+        self.assertEqual(events, [])
+
+    def test_stale_midway_keeps_events_balanced(self) -> None:
+        played: list[bytes] = []
+        events: list[str] = []
+        speaker = self._speaker(played, events)
+        stream = speaker.stream(1)
+        speaker.speak(1, japanese="new").join(5)  # makes the stream stale before any part
+        events_before = list(events)
+        stream.add("old")
+        stream.close()
+        stream.join(5)
+        self.assertEqual(events, events_before)
+        self.assertEqual(events.count("start"), events.count("end"))
 
     def test_stream_synth_error_reports_once(self) -> None:
         played: list[bytes] = []

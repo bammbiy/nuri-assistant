@@ -23,7 +23,7 @@ python src/run_nuri.py --autostart  # 윈도우 시작 때 쓰는 실행(비서 
 python -m nuri_assistant [--classic]   # 같은 실행 (src/ 안에서, 또는 pip install -e . 뒤 어디서나. 설치하면 nuri-assistant 명령도 생김)
 pip install -e .[dev]             # 선택: 개발용 설치(pyflakes). 그림이 assets/에 있어서 편집 설치(-e)만 지원
 python -m unittest discover -s tests                         # 저장소 루트에서 (테스트는 src.nuri_assistant 로 import)
-python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 234개 통과)
+python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 242개 통과)
 python -m pyflakes src tests tools
 pip install -r tools/requirements-frames.txt                 # 프레임 생성 도구용 (앱에는 필요 없음)
 python tools/build_frames.py nuri|sera|yuki|akane|shizuku|hinata|sakura|reika [출력폴더]   # 캐릭터 프레임 재생성
@@ -130,7 +130,7 @@ research_notes/                웹 조사 작업 메모 (git 제외), reports/ �
 - 백그라운드 작업(모델 호출, 가격 조회, 음성 합성)은 스레드에서 돌리고 결과는 `MascotApp.events` 큐에 `("종류", 값...)`으로 넘깁니다. 새 종류는 `_handle_event`의 표에 `_on_<종류>` 메서드로 추가합니다. 스레드에서 Tk 위젯을 직접 만지지 않습니다.
 - 말풍선과 음성을 함께 낼 때는 `MascotApp.talk()`, 말풍선만이면 `say()`. 오류·안내 문구는 읽지 않습니다.
 - 모델 답변의 일본어 음성 대사는 `<ja>…</ja>`로 받고 `ReplyParser.voice`에 담깁니다(말풍선과 대화 기억에는 남기지 않음).
-- 문장 단위 음성: 답변을 보낼 때 `send()`가 `VoiceSpeaker.stream()`을 열고, 모델이 `<ja>` 안에서 문장(。！？!?♪… 또는 줄바꿈)을 끝낼 때마다 `Companion.reply(on_voice=)` → `VoiceStream.add`. 합성은 순서대로 하나씩(VOICEVOX 다중도 1), 앞 문장이 재생되는 동안 다음 문장을 합성. `<ja>`가 하나도 안 왔으면 끝난 뒤 예전처럼 한국어 전체를 번역해 말합니다. 새 `speak()`/`stream()`은 이전 것을 낡은 것으로 만들어 남은 문장을 버립니다(최신 대사 우선). 앱이 스스로 하는 대사(`talk()`)는 지금처럼 한 번에.
+- 문장 단위 음성: 답변을 보낼 때 `send()`가 `VoiceSpeaker.stream()`을 열고, 모델이 `<ja>` 안에서 문장(。！？!?♪… 또는 줄바꿈)을 끝낼 때마다 `Companion.reply(on_voice=)` → `VoiceStream.add`. 합성은 순서대로 하나씩(VOICEVOX 다중도 1), 앞 문장이 재생되는 동안 다음 문장을 합성. 최종 답변 라운드가 문장을 하나도 내보내지 않았으면(`CompanionReply.voiced`가 거짓: `<ja>`가 없거나, 도구 호출 전 라운드에서만 말함) 끝난 뒤 예전처럼 `<ja>` 또는 번역으로 말합니다. 새 `speak()`/`stream()`은 이전 것을 낡은 것으로 만들어 남은 문장을 버립니다(최신 대사 우선: 답변 중 일정 알림이 오면 답변 음성은 거기서 끊김). 스트림의 `on_start`/`on_end`는 전체에 한 번씩이라 문장 사이에도 입이 움직이고, 스트림은 `_ask`의 `finally`에서 반드시 닫습니다. 앱이 스스로 하는 대사(`talk()`)는 지금처럼 한 번에.
 - 파일 이름 규칙은 내부적으로 `{DATE}`·`{YEAR}`·`{MONTH}`·`{DAY}`·`{MEDIA}`·`{PAGE}`(설정 창에는 `{날짜}`·`{연도}`·`{월}`·`{일}`·`{매체}`·`{페이지}`, 변환은 `classic.core.naming`의 `rule_from_korean`/`rule_to_korean`). `{PAGE}`는 필수이고 중괄호 짝이 안 맞는 규칙도 거부(`validate_rule`), `{MEDIA}`가 없으면 매체코드를 묻지 않습니다. 대화 도구는 `CompanionSettings.rename_*`를 `services.rename_options()`로 받아(메모장으로 고친 확장자 `"pdf"`·문자열도 정리) 매번 읽으므로 설정을 바꾸면 바로 적용됩니다. 요청 문장에 규칙을 말하면("매체-날짜 순") 그쪽이 우선.
 - 생활 알림: 아침 브리핑은 `briefing_time`이 비면 앱을 켤 때 하루 한 번, 정하면 그 시각부터 하루 한 번(`last_briefing`). 하루 정리는 `wrapup_time`(기본 18:00)부터 3시간 안에만(`WRAPUP_WINDOW`, 늦게 켠 날은 건너뜀). 두 줄이 같은 폴링에 겹치지 않게 한 번에 하나. 자리 비움은 `presence.idle_seconds()`(Windows만, 다른 OS는 None이라 꺼짐)를 30초마다 `PresenceTracker`에 넣고, 앱이 바쁘거나 확인 카드·비서 선택·집중 타이머 중이면 `quiet`: 돌아옴 인사와 물 알림은 미루고 연속 사용 시간은 새로 셉니다.
 - 친밀도(`companion/affection.py`): 대화 답변 +1(하루 30), 확인 카드 승인 +1, 할 일 완료 +3, 10분 이상 집중 +3, 캐릭터별 하루 최대 40점, 내려가지 않음. 단계가 오르면 답변·카드가 끝난 뒤 `level_up` 대사. 시스템 프롬프트에 단계 이름과 기억 수첩의 최근 30개(`MAX_FACTS`)가 `Companion(context=...)`로 매 메시지 들어갑니다(모델 스레드에서 읽으니 SQLite만 만짐).
@@ -140,9 +140,10 @@ research_notes/                웹 조사 작업 메모 (git 제외), reports/ �
 - 선택 대사의 공통 조건은 `MascotApp._optional_ok()`(전체 화면·바쁨·확인 카드·비서 선택 중이면 아님): 혼잣말·쓰다듬기 반응 외에 돌아옴 인사·레벨업·다운로드·복사한 글·브리핑·하루 정리·기념일이 이걸 보고 미룹니다(날짜를 저장하지 않으니 나중에 나옴).
 - 전체 화면 조용 모드(`fullscreen_quiet`, 기본 켬): `_stay_visible`(3초)이 맨 앞 창이 우리 창·바탕화면·작업 표시줄이 아니고 모니터를 덮으며 `WS_CAPTION`이 없으면 전체 화면으로 봅니다(자동 숨김 작업 표시줄의 최대화 창 제외). 그동안 `-topmost`를 풀고 다시 걸지 않으며, 끝나면 다시 겁니다. 시간이 중요한 알림(일정·할 일·타이머·가격)은 그대로 나와 소리와 음성은 들리지만 말풍선은 게임 뒤에 가려질 수 있습니다(알려진 한계).
 - 첫 실행 개인정보 안내: `privacy_shown`이 거짓이면 비서를 고른 뒤 2.5초에 `PrivacyWindow`, 닫으면 참. 메뉴에서 다시 열 수 있음. 밖으로 나가는 것을 새로 추가하면 이 창 문구도 고칩니다.
-- 정각 알림(`hourly_chime`, 기본 꺼짐): 8~23시 정각부터 3분 안(`CHIME_WINDOW_MIN`)에 `_routine_step`이 한 번(`last_chime` = "YYYY-MM-DDTHH"), 브리핑·하루 정리·기념일 뒤 1분이 지나야. 바쁘거나 전체 화면이면 그 시각은 건너뜀. 명절·계절 첫날은 기념일과 같은 자리(`last_occasion`, `notify_occasion`)에서 생일·N일이 없는 날에만. 설날·추석은 `fun/seasons.py` 표가 2030년까지라 그 뒤는 표를 늘려야 함.
-- 가벼운 모드(`light_mode`, AI 설정): 음성 끔(`_voice_on()`이 거짓, 시스템 프롬프트에도 `<ja>` 요청 안 함), 깜박임 간격 2배(`LIGHT_SLOWDOWN`), 대기 표정 바꾸기 없음, Ollama `num_ctx` 2048(`LIGHT_OPTIONS`). 작은 모델(`qwen3:4b`)은 권유만 하고 자동으로 바꾸지 않음.
-- 윈도우 시작 때 켜기(`autostart.py`, 메뉴 체크): 설정 파일이 아니라 레지스트리 값이 진실. 켜면 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`에 `NuriAssistant` = `"pythonw.exe" "…\src\run_nuri.py" --autostart`, 끄면 그 값만 지움. 기본 꺼짐, Windows 아니면 메뉴가 회색. `--autostart`로 켜지면 비서 선택 화면 없이 마지막 캐릭터로 시작. 저장소 폴더를 옮기면 다시 켜야 함.
+- 정각 알림(`hourly_chime`, 기본 꺼짐): 8~23시 정각부터 3분 안(`CHIME_WINDOW_MIN`)에 `_routine_step`이 한 번(`last_chime` = "YYYY-MM-DDTHH"), 브리핑·하루 정리·기념일 뒤 1분이 지나야. 바쁘거나 전체 화면·집중 타이머 중이면 그 시각은 건너뜀. 명절·계절 첫날은 기념일과 같은 자리(`last_occasion`, `notify_occasion`)에서 생일·N일이 없는 날에만. 설날·추석은 `fun/seasons.py` 표가 2030년까지라 그 뒤는 표를 늘려야 함.
+- 가벼운 모드(`light_mode`, AI 설정): 음성 끔(`_voice_on()`이 거짓, 시스템 프롬프트에도 `<ja>` 요청 안 함), 깜박임 간격 2배(`LIGHT_SLOWDOWN`), 대기 표정 바꾸기 없음, 모델에 보내는 지난 대화 최대 10개(`LIGHT_HISTORY`). `num_ctx`는 줄이지 않음(시스템 프롬프트+도구 설명이 2048을 넘어 앞이 잘림). 작은 모델(`qwen3:4b`)은 권유만 하고 자동으로 바꾸지 않음.
+- 윈도우 시작 때 켜기(`autostart.py`, 메뉴 체크): 설정 파일이 아니라 레지스트리 값이 진실. 켜면 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`에 `NuriAssistant` = `"pythonw.exe" "…\src\run_nuri.py" --autostart`, 끄면 그 값만 지움. 기본 꺼짐, Windows 아니면 메뉴가 회색. `--autostart`로 켜지면 비서 선택 화면 없이 마지막 캐릭터로 시작하고, 첫 인사는 말풍선만(로그인 직후엔 VOICEVOX가 아직 안 떠 있음). 저장소 폴더를 옮기면 다시 켜야 함.
+- `_update_settings`는 `last_*` 키만 바꿀 때 `Companion`을 다시 만들지 않습니다(매시간 정각 기록 때문에 도구 미지원 판정 등이 날아가지 않게).
 - 설정 항목을 추가할 때는 `CompanionSettings`에 기본값과 함께 넣습니다. 알 수 없는 키는 로드 시 무시되므로 옛 설정 파일도 열립니다.
 
 ## UI 관례

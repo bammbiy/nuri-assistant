@@ -112,7 +112,7 @@ FIRST_BLINK_MS = 3500
 BLINK_MS = 140
 BLINK_GAP_MS = (2500, 6000)
 LIGHT_SLOWDOWN = 2         # light mode: blink half as often, no idle glances
-LIGHT_OPTIONS = {"num_ctx": 2048}  # light mode: smaller model context (less VRAM/RAM)
+LIGHT_HISTORY = 10         # light mode: at most this many past messages go to the model
 MOUTH_FLAP_MS = 130
 # The face relaxes to neutral after a base delay plus a little per character of text.
 RELAX_BASE_MS = 6000
@@ -158,6 +158,7 @@ class MascotApp(tk.Tk):
         self._held_notices: list[tuple[str, str]] = []
         self._reporting_error = False
         self._voice_error_shown = False
+        self._voice_playing = False
         self._price_checking = False
         self.pending_actions: list[ConfirmableAction] = []
         self._preview_window: RenamePreviewWindow | None = None
@@ -197,7 +198,8 @@ class MascotApp(tk.Tk):
             self.withdraw()
             self.after(10, lambda: self.open_picker(startup=True))
         else:
-            self.talk(random.choice(self.persona.greetings), "happy")
+            # Right after Windows starts, VOICEVOX is usually not up yet: greet in the bubble only.
+            (self.say if with_windows else self.talk)(random.choice(self.persona.greetings), "happy")
             self.after(BRIEFING_DELAY_MS, self.brief_today)
         if not self.settings.first_met:
             self._update_settings(first_met=datetime.now().date().isoformat())
@@ -256,11 +258,10 @@ class MascotApp(tk.Tk):
             store=self.store,
             model=settings.model,
             user_name=settings.user_name,
-            history_limit=settings.history_limit,
+            history_limit=min(settings.history_limit, LIGHT_HISTORY) if settings.light_mode else settings.history_limit,
             tools=self.toolbox,
             voice=self._voice_on(),
             context=self._companion_context,
-            options=LIGHT_OPTIONS if settings.light_mode else None,
         )
 
     @staticmethod
@@ -291,6 +292,8 @@ class MascotApp(tk.Tk):
     def _update_settings(self, **changes: object) -> None:
         self.settings = replace(self.settings, **changes)
         save_settings(self.settings_path, self.settings)
+        if all(key.startswith("last_") for key in changes):
+            return  # bookkeeping only (hourly chime etc.): keep the companion and what it learned about tools
         self.companion = self._make_companion()
 
     # ----- window -----------------------------------------------------------------
@@ -631,11 +634,12 @@ class MascotApp(tk.Tk):
             reply = companion.reply(text, on_update=lambda visible, expression: self.events.put(("update", visible, expression)),
                                     on_voice=stream.add if stream else None)
         except Exception as exc:  # noqa: BLE001 - every failure must reach the bubble and re-enable input
-            if stream:
-                stream.close()
             self.events.put(("error", str(exc)))
             return
-        self.events.put(("done", reply.text, reply.expression, reply.actions, reply.voice, stream))
+        finally:
+            if stream:
+                stream.close()  # no more parts; its threads end once the queued ones are played
+        self.events.put(("done", reply.text, reply.expression, reply.actions, reply.voice, reply.voiced))
 
     def _drain_events(self) -> None:
         try:
@@ -673,14 +677,11 @@ class MascotApp(tk.Tk):
             self._start_talking()
             self.say(visible, expression)
 
-    def _on_done(self, text: str, expression: str | None, actions: list, spoken: str,
-                 stream: VoiceStream | None = None) -> None:
-        self.talking = False
+    def _on_done(self, text: str, expression: str | None, actions: list, spoken: str, voiced: bool = False) -> None:
+        self.talking = self._voice_playing  # the streamed voice may still be speaking
         self.gain("chat")
         self.say(text, expression)
-        if stream is not None:
-            stream.close()
-        if stream is None or not stream.count:  # no <ja> streamed: translate the whole reply as before
+        if not voiced:  # nothing streamed for the final answer: speak <ja> or a translation afterwards, as before
             self.speak(text, japanese=spoken)
         self._set_busy(False)
         if actions:
@@ -693,6 +694,7 @@ class MascotApp(tk.Tk):
         self._set_busy(False)
 
     def _on_voice(self, playing: bool) -> None:
+        self._voice_playing = playing
         if playing:
             self._start_talking()
         else:
@@ -874,11 +876,13 @@ class MascotApp(tk.Tk):
             elif holiday:
                 self.talk(*holiday_line(self.persona, holiday))
             self._last_routine_line = time.monotonic()
-        elif self.settings.hourly_chime and time.monotonic() - self._last_routine_line >= ROUTINE_GAP_S:
+        elif (self.settings.hourly_chime and time.monotonic() - self._last_routine_line >= ROUTINE_GAP_S
+              and self.focus_timer.state(now).phase is None):  # not over a focus block
             key = hourly_key(now, self.settings.last_chime)
             if key:
                 self._update_settings(last_chime=key)
                 self.talk(*chime_line(self.persona, now))
+                self._last_routine_line = time.monotonic()
 
     # ----- idle talk and glances ------------------------------------------------------
 

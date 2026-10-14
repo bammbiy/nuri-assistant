@@ -135,16 +135,21 @@ class VoiceStream:
             self._audio.put(_DONE)
 
     def _play_loop(self) -> None:
-        speaker = self._speaker
-        while True:
-            audio = self._audio.get()
-            if audio is _DONE:
-                return
-            with speaker._lock:
-                if self.stale:
-                    continue
-                speaker.on_start()
-                try:
+        # on_start once before the first part and on_end once after the last, so the mouth keeps
+        # moving across the short gaps while the next sentence is synthesized.
+        speaker, started = self._speaker, False
+        try:
+            while True:
+                audio = self._audio.get()
+                if audio is _DONE:
+                    return
+                with speaker._lock:
+                    if self.stale:
+                        continue
+                    if not started:
+                        started = True
+                        speaker.on_start()
                     speaker.player(audio)
-                finally:
-                    speaker.on_end()
+        finally:
+            if started:
+                speaker.on_end()
