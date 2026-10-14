@@ -250,5 +250,108 @@ class JapaneseLineTest(unittest.TestCase):
             self.assertEqual(companion.store.recent("nuri")[-1]["content"], "[shy] 고, 고마워요")
 
 
+class VoiceStreamingTest(unittest.TestCase):
+    def test_take_voice_char_by_char(self) -> None:
+        parser = ReplyParser()
+        got: list[str] = []
+        for ch in "[happy] 좋아! <ja>よし。一緒にやろう！」ね</ja>":
+            parser.feed(ch)
+            got.extend(parser.take_voice())
+        self.assertEqual(got, ["よし。", "一緒にやろう！」"])
+        self.assertEqual(parser.take_voice(final=True), ["ね"])
+        self.assertEqual(parser.take_voice(final=True), [])
+
+    def test_take_voice_never_leaks_partial_tags(self) -> None:
+        parser = ReplyParser()
+        for ch in "<ja>あ</":
+            parser.feed(ch)
+            self.assertEqual(parser.take_voice(), [])
+        self.assertEqual(parser.take_voice(final=True), ["あ"])
+
+    def test_take_voice_open_block_and_two_blocks(self) -> None:
+        parser = ReplyParser()
+        parser.feed("네 <ja>はい。いいよ")
+        self.assertEqual(parser.take_voice(), ["はい。"])
+        parser.feed("</ja> 그리고 <ja>またね！</ja>")
+        self.assertEqual(parser.take_voice(), ["いいよ"])
+        self.assertEqual(parser.take_voice(final=True), ["またね！"])
+
+    def test_take_voice_without_ja(self) -> None:
+        parser = ReplyParser()
+        parser.feed("[happy] 안녕하세요.")
+        self.assertEqual(parser.take_voice(final=True), [])
+
+    def test_companion_reply_calls_on_voice_and_passes_options(self) -> None:
+        seen = []
+
+        class Client:
+            def chat_stream(self, _model, messages, options=None, tools=None):
+                seen.append(options)
+                for ch in "[happy] 좋아 <ja>よし。いこう！</ja>":
+                    yield ch
+
+        voices: list[str] = []
+
+        def on_voice(text: str) -> None:
+            voices.append(text)
+            raise RuntimeError("ignored")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            companion = Companion(get_persona("nuri"), Client(), ConversationStore(Path(tmp) / "c.sqlite3"), "m",
+                                  voice=True, options={"num_predict": 7})
+            reply = companion.reply("go", on_voice=on_voice)
+            companion.to_japanese("x")
+        self.assertEqual(voices, ["よし。", "いこう！"])
+        self.assertEqual(reply.text, "좋아")
+        self.assertEqual(seen, [{"num_predict": 7}, {"num_predict": 7}])
+
+    def _speaker(self, played, events=None, fail_on=None):
+        class Client:
+            def synthesize(self, text, voice_id):
+                if text == fail_on:
+                    raise VoiceError("boom")
+                return text.encode()
+
+        return VoiceSpeaker(lambda: Client(), translate=lambda ko: ko,
+                            on_start=lambda: events is not None and events.append("start"),
+                            on_end=lambda: events is not None and events.append("end"),
+                            on_error=lambda m: events is not None and events.append("error"),
+                            player=lambda audio: played.append(audio) or True)
+
+    def test_stream_plays_in_order(self) -> None:
+        played: list[bytes] = []
+        events: list[str] = []
+        stream = self._speaker(played, events).stream(1)
+        stream.add("a")
+        stream.add(" ")
+        stream.add("b")
+        stream.close()
+        stream.join(5)
+        self.assertEqual(played, [b"a", b"b"])
+        self.assertEqual(stream.count, 2)
+        self.assertEqual(events, ["start", "end", "start", "end"])
+
+    def test_stale_stream_drops_parts(self) -> None:
+        played: list[bytes] = []
+        speaker = self._speaker(played)
+        stream = speaker.stream(1)
+        speaker.speak(1, japanese="new").join(5)
+        stream.add("old")
+        stream.close()
+        stream.join(5)
+        self.assertEqual(played, [b"new"])
+
+    def test_stream_synth_error_reports_once(self) -> None:
+        played: list[bytes] = []
+        events: list[str] = []
+        stream = self._speaker(played, events, fail_on="b").stream(1)
+        for part in ("a", "b", "c"):
+            stream.add(part)
+        stream.close()
+        stream.join(5)
+        self.assertEqual(events.count("error"), 1)
+        self.assertNotIn(b"c", played)
+
+
 if __name__ == "__main__":
     unittest.main()

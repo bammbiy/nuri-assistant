@@ -42,7 +42,9 @@ class Companion:
         tools: ToolBox | None = None,
         voice: bool = False,
         context: Callable[[], tuple[str, tuple[str, ...]]] | None = None,
+        options: dict | None = None,
     ) -> None:
+        self.options = options
         self.persona = persona
         self.client = client
         self.store = store
@@ -71,7 +73,12 @@ class Companion:
         messages.append({"role": "user", "content": user_text})
         return messages
 
-    def reply(self, user_text: str, on_update: Callable[[str, str], None] | None = None) -> CompanionReply:
+    def reply(
+        self,
+        user_text: str,
+        on_update: Callable[[str, str], None] | None = None,
+        on_voice: Callable[[str], None] | None = None,
+    ) -> CompanionReply:
         """Stream a reply, reporting (visible_text, expression) as it grows.
 
         The exchange is saved only when the model answered, so a failed request
@@ -88,18 +95,21 @@ class Companion:
             parser = ReplyParser(default_expression=expression)
             calls: list[ToolCall] = []
             try:
-                for item in self.client.chat_stream(self.model, messages, tools=tools):
+                for item in self.client.chat_stream(self.model, messages, options=self.options, tools=tools):
                     if isinstance(item, ToolCall):
                         calls.append(item)
                         continue
                     shown = parser.feed(item)
                     if on_update is not None and shown:
                         on_update(shown, parser.expression)
+                    self._emit_voice(parser, on_voice, False)
             except OllamaToolsUnsupported:
                 self.tools_supported = False
                 messages[0] = self.build_messages(text)[0]
                 continue
             round_text = parser.finish()
+            if round_text:
+                self._emit_voice(parser, on_voice, True)
             if round_text:
                 visible, expression, spoken = round_text, parser.expression, parser.voice
             if not calls or self.tools is None:
@@ -121,6 +131,16 @@ class Companion:
         self.store.add(self.persona.id, "assistant", f"[{expression}] {visible}")
         return CompanionReply(visible, expression, actions, spoken)
 
+    @staticmethod
+    def _emit_voice(parser: ReplyParser, on_voice: Callable[[str], None] | None, final: bool) -> None:
+        if on_voice is None:
+            return
+        for sentence in parser.take_voice(final=final):
+            try:
+                on_voice(sentence)
+            except Exception:  # noqa: BLE001 - speech must never break the reply
+                pass
+
     def to_japanese(self, text: str) -> str:
         """Translate an app-made Korean line into the character's spoken Japanese (for TTS)."""
 
@@ -133,7 +153,7 @@ class Companion:
             {"role": "user", "content": text},
         ]
         parser = ReplyParser()
-        for item in self.client.chat_stream(self.model, messages):
+        for item in self.client.chat_stream(self.model, messages, options=self.options):
             if isinstance(item, str):
                 parser.feed(item)
         return parser.finish()

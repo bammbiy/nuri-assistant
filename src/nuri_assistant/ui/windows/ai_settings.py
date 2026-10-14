@@ -11,10 +11,11 @@ from ..theme import ACCENT_DARK, BG, DANGER, FONT, SOFT, SOFT_HOVER, SUBTLE, TEX
 
 POLL_MS = 150
 HISTORY_MIN, HISTORY_MAX = 4, 100
+SMALL_MODEL = "qwen3:4b"  # suggested for light mode; still calls tools, needs about half the memory
 
 
 class AISettingsWindow(tk.Toplevel):
-    """Model name (with installed-model chips), Ollama address and conversation memory length."""
+    """Model name (with installed-model chips), Ollama address, conversation memory length and light mode."""
 
     def __init__(
         self,
@@ -57,6 +58,18 @@ class AISettingsWindow(tk.Toplevel):
         self.history.insert(0, str(settings.history_limit))
         self.history.pack(side="left", padx=(10, 6), ipady=4)
         tk.Label(row, text=f"개 ({HISTORY_MIN}~{HISTORY_MAX}, 길수록 느려져요)", font=(FONT, 9), bg=BG, fg=SUBTLE).pack(side="left")
+
+        self.light = tk.BooleanVar(value=settings.light_mode)
+        tk.Checkbutton(body, text="가벼운 모드", variable=self.light, font=(FONT, 10, "bold"), bg=BG, fg=TEXT,
+                       activebackground=BG, selectcolor="#ffffff", highlightthickness=0, bd=0, anchor="w",
+                       command=self._light_hint).pack(fill="x", pady=(14, 0))
+        tk.Label(body, text="음성을 끄고, 움직임을 줄이고, AI가 한 번에 읽는 양을 줄여요. 느린 PC·노트북용.",
+                 font=(FONT, 9), bg=BG, fg=SUBTLE, wraplength=380, justify="left").pack(anchor="w")
+        self.light_note = tk.Label(body, text="", font=(FONT, 9), bg=BG, fg=ACCENT_DARK, cursor="hand2",
+                                   wraplength=380, justify="left")
+        self.light_note.pack(anchor="w")
+        self.light_note.bind("<Button-1>", lambda _event: self._pick(SMALL_MODEL))
+        self._light_hint()
 
         self.notice = tk.Label(body, text="", font=(FONT, 9), bg=BG, fg=DANGER, anchor="w")
         self.notice.pack(fill="x", pady=(10, 0))
@@ -109,9 +122,15 @@ class AISettingsWindow(tk.Toplevel):
             chip.bind("<Enter>", lambda _event, widget=chip: widget.configure(bg=SOFT_HOVER))
             chip.bind("<Leave>", lambda _event, widget=chip: widget.configure(bg=SOFT))
 
+    def _light_hint(self) -> None:
+        small = self.light.get() and self.model.get().strip() != SMALL_MODEL
+        self.light_note.configure(text=f"더 가볍게: 작은 모델 {SMALL_MODEL}로 바꾸기 (누르기, 먼저 ollama pull {SMALL_MODEL})"
+                                  if small else "")
+
     def _pick(self, name: str) -> None:
         self.model.delete(0, "end")
         self.model.insert(0, name)
+        self._light_hint()
 
     # ----- save -------------------------------------------------------------------------
 
@@ -131,5 +150,5 @@ class AISettingsWindow(tk.Toplevel):
         if not HISTORY_MIN <= limit <= HISTORY_MAX:
             self.notice.configure(text=f"대화 기억 길이는 {HISTORY_MIN}~{HISTORY_MAX} 사이 숫자로 적어 주세요.")
             return
-        self.on_save(model=model, ollama_url=url, history_limit=limit)
+        self.on_save(model=model, ollama_url=url, history_limit=limit, light_mode=self.light.get())
         self.destroy()

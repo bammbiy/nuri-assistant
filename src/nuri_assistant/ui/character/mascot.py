@@ -13,9 +13,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import messagebox, simpledialog
 
+from ... import autostart
 from ...announcements import (
-    clipboard_line, compose_briefing, compose_wrapup, downloads_line, level_up_line, nag_line, occasion_line, presence_line,
-    price_alert_line, reminder_line, timer_line, with_weather,
+    chime_line, clipboard_line, compose_briefing, compose_wrapup, downloads_line, holiday_line, level_up_line, nag_line,
+    occasion_line, presence_line, price_alert_line, reminder_line, timer_line, with_weather,
 )
 from ...classic.core import rule_pattern
 from ...classic.tools import resolve_folder
@@ -33,15 +34,15 @@ from ...companion import (
 )
 from ...crashlog import log_exception
 from ...paths import APP_DIR, ASSETS_DIR, SETTINGS_PATH, USER_CHARACTERS
-from ...fun import fortune_text, occasion_today, today_fortune
+from ...fun import fortune_text, holiday_today, occasion_today, today_fortune
 from ...pcwatch import DownloadNudge, count_waiting, suggest
 from ...presence import ClickCombo, IdleChatter, PatDetector, PresenceTracker, foreground_fullscreen, idle_seconds
 from ...pricewatch import CheckResult, WatchAction
-from ...routine import daily_due, parse_clock
+from ...routine import daily_due, hourly_key, parse_clock
 from ...screen import Rect, all_monitors, default_position, is_reachable, work_area
 from ...services import Services, rename_options
 from ...todo import TodoAction
-from ...voice import VoiceSpeaker, VoicevoxClient
+from ...voice import VoiceSpeaker, VoiceStream, VoicevoxClient
 from ...weather import Place, WeatherError, fetch_today, weather_line
 from ..classic.assistant import AssistantWindow
 from ..classic.desktop import NuriAssistantApp
@@ -110,6 +111,8 @@ WRAPUP_WINDOW = timedelta(hours=3)  # an app started later than this after the w
 FIRST_BLINK_MS = 3500
 BLINK_MS = 140
 BLINK_GAP_MS = (2500, 6000)
+LIGHT_SLOWDOWN = 2         # light mode: blink half as often, no idle glances
+LIGHT_OPTIONS = {"num_ctx": 2048}  # light mode: smaller model context (less VRAM/RAM)
 MOUTH_FLAP_MS = 130
 # The face relaxes to neutral after a base delay plus a little per character of text.
 RELAX_BASE_MS = 6000
@@ -132,7 +135,7 @@ FALLBACK_BG = "#f3eff7"
 class MascotApp(tk.Tk):
     """Desktop companion: an always-on-top character that chats through a local model."""
 
-    def __init__(self, app_dir: Path = APP_DIR) -> None:
+    def __init__(self, app_dir: Path = APP_DIR, with_windows: bool = False) -> None:
         super().__init__()
         apply_default_fonts(self)
         self.settings_path = app_dir / SETTINGS_PATH.name
@@ -190,7 +193,7 @@ class MascotApp(tk.Tk):
         self._build()
         self._place_window()
         self._render_character()
-        if self.settings.pick_on_start:
+        if self.settings.pick_on_start and not with_windows:  # started with Windows: no picker in the way
             self.withdraw()
             self.after(10, lambda: self.open_picker(startup=True))
         else:
@@ -255,9 +258,30 @@ class MascotApp(tk.Tk):
             user_name=settings.user_name,
             history_limit=settings.history_limit,
             tools=self.toolbox,
-            voice=settings.voice_enabled,
+            voice=self._voice_on(),
             context=self._companion_context,
+            options=LIGHT_OPTIONS if settings.light_mode else None,
         )
+
+    @staticmethod
+    def _autostart_enabled() -> bool:
+        try:
+            return autostart.supported() and autostart.is_enabled()
+        except OSError:
+            return False
+
+    def _toggle_autostart(self) -> None:
+        on = self.autostart_var.get()
+        try:
+            autostart.set_enabled(on)
+        except OSError as exc:
+            self.autostart_var.set(not on)
+            self.say(f"시작 프로그램 설정을 바꾸지 못했어요.\n{exc}", "sad")
+            return
+        self.say("이제 윈도우를 켜면 저도 같이 켜져요." if on else "윈도우를 켤 때 저절로 켜지지 않게 했어요.", "happy")
+
+    def _voice_on(self) -> bool:
+        return self.settings.voice_enabled and not self.settings.light_mode
 
     def _companion_context(self) -> tuple[str, tuple[str, ...]]:
         """Closeness name and remembered facts for the system prompt (read on the worker thread; SQLite only)."""
@@ -324,6 +348,9 @@ class MascotApp(tk.Tk):
         self.menu.add_command(label="가격 알림 설정…", command=self.open_price_settings)
         self.menu.add_command(label="음성 설정…", command=self.open_voice_settings)
         self.menu.add_command(label="생활 알림 설정…", command=self.open_routine_settings)
+        self.autostart_var = tk.BooleanVar(value=self._autostart_enabled())
+        self.menu.add_checkbutton(label="윈도우 시작할 때 켜기", variable=self.autostart_var, command=self._toggle_autostart,
+                                  state="normal" if autostart.supported() else "disabled")
         self.menu.add_separator()
         self.menu.add_command(label="대화 기록 보기", command=self.show_log)
         self.menu.add_command(label="기억 수첩", command=lambda: MemoWindow(self, self.memos))
@@ -527,7 +554,8 @@ class MascotApp(tk.Tk):
         try:
             self._render_character()
         finally:
-            self.after(BLINK_MS if self.blinking else random.randint(*BLINK_GAP_MS), self._blink)
+            gap = random.randint(*BLINK_GAP_MS) * (LIGHT_SLOWDOWN if self.settings.light_mode else 1)
+            self.after(BLINK_MS if self.blinking else gap, self._blink)
 
     def _start_talking(self) -> None:
         if not self.talking:
@@ -594,15 +622,20 @@ class MascotApp(tk.Tk):
         self._set_busy(True)
         self.say("…", "thinking")
         companion = self.companion
-        threading.Thread(target=self._ask, args=(companion, text), daemon=True).start()
+        # Japanese sentences start playing while the reply still streams (VoiceStream is thread-safe).
+        stream = self.voice.stream(self._voice_id()) if self._voice_on() and companion.voice else None
+        threading.Thread(target=self._ask, args=(companion, text, stream), daemon=True).start()
 
-    def _ask(self, companion: Companion, text: str) -> None:
+    def _ask(self, companion: Companion, text: str, stream: VoiceStream | None = None) -> None:
         try:
-            reply = companion.reply(text, on_update=lambda visible, expression: self.events.put(("update", visible, expression)))
+            reply = companion.reply(text, on_update=lambda visible, expression: self.events.put(("update", visible, expression)),
+                                    on_voice=stream.add if stream else None)
         except Exception as exc:  # noqa: BLE001 - every failure must reach the bubble and re-enable input
+            if stream:
+                stream.close()
             self.events.put(("error", str(exc)))
             return
-        self.events.put(("done", reply.text, reply.expression, reply.actions, reply.voice))
+        self.events.put(("done", reply.text, reply.expression, reply.actions, reply.voice, stream))
 
     def _drain_events(self) -> None:
         try:
@@ -640,11 +673,15 @@ class MascotApp(tk.Tk):
             self._start_talking()
             self.say(visible, expression)
 
-    def _on_done(self, text: str, expression: str | None, actions: list, spoken: str) -> None:
+    def _on_done(self, text: str, expression: str | None, actions: list, spoken: str,
+                 stream: VoiceStream | None = None) -> None:
         self.talking = False
         self.gain("chat")
         self.say(text, expression)
-        self.speak(text, japanese=spoken)
+        if stream is not None:
+            stream.close()
+        if stream is None or not stream.count:  # no <ja> streamed: translate the whole reply as before
+            self.speak(text, japanese=spoken)
         self._set_busy(False)
         if actions:
             self.pending_actions = list(actions)
@@ -831,8 +868,17 @@ class MascotApp(tk.Tk):
               and time.monotonic() - self._last_routine_line >= ROUTINE_GAP_S):
             self._update_settings(last_occasion=now.date().isoformat())
             occasion = occasion_today(now.date(), self.settings.user_birthday, self.settings.first_met)
+            holiday = None if occasion else holiday_today(now.date())
             if occasion:
                 self.talk(*occasion_line(self.persona, occasion.kind, occasion.days))
+            elif holiday:
+                self.talk(*holiday_line(self.persona, holiday))
+            self._last_routine_line = time.monotonic()
+        elif self.settings.hourly_chime and time.monotonic() - self._last_routine_line >= ROUTINE_GAP_S:
+            key = hourly_key(now, self.settings.last_chime)
+            if key:
+                self._update_settings(last_chime=key)
+                self.talk(*chime_line(self.persona, now))
 
     # ----- idle talk and glances ------------------------------------------------------
 
@@ -849,7 +895,7 @@ class MascotApp(tk.Tk):
         if self.chatter.due(now):
             self.talk(random.choice(self.persona.idle_talk), random.choice(("happy", "neutral", "thinking")))
             self.chatter.spoke(now)
-        elif time.monotonic() >= self._next_glance and self.expression == "neutral":
+        elif time.monotonic() >= self._next_glance and self.expression == "neutral" and not self.settings.light_mode:
             self._next_glance = time.monotonic() + random.uniform(*GLANCE_GAP_S)
             self.set_expression(random.choice(("happy", "thinking", "shy")))
             self._relax_later(GLANCE_MS)
@@ -1027,10 +1073,12 @@ class MascotApp(tk.Tk):
         self.speak(text)
 
     def speak(self, text: str, japanese: str = "") -> None:
-        if not self.settings.voice_enabled or not (text.strip() or japanese.strip()):
+        if not self._voice_on() or not (text.strip() or japanese.strip()):
             return
-        voice_id = self.settings.voice_ids.get(self.persona.id, self.persona.voice_id)
-        self.voice.speak(voice_id, japanese=japanese, korean="" if japanese else text)
+        self.voice.speak(self._voice_id(), japanese=japanese, korean="" if japanese else text)
+
+    def _voice_id(self) -> int:
+        return self.settings.voice_ids.get(self.persona.id, self.persona.voice_id)
 
     def _to_japanese(self, text: str) -> str:
         key = f"{self.persona.id}:{text}"
@@ -1052,6 +1100,8 @@ class MascotApp(tk.Tk):
         def save(**changes: object) -> None:
             self._voice_error_shown = False
             self._update_settings(**changes)
+            if self.settings.voice_enabled and self.settings.light_mode:
+                self.say("가벼운 모드라 지금은 목소리를 내지 않아요. AI 설정에서 끌 수 있어요.", "neutral")
 
         VoiceSettingsWindow(self, self.settings, self.persona, save, preview)
 
@@ -1206,6 +1256,6 @@ class MascotApp(tk.Tk):
         self.destroy()
 
 
-def run_mascot() -> None:
-    MascotApp().mainloop()
+def run_mascot(with_windows: bool = False) -> None:
+    MascotApp(with_windows=with_windows).mainloop()
 

@@ -9,6 +9,8 @@ _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
 _JA_BLOCK = re.compile(r"<ja>(.*?)</ja>", re.DOTALL)
 # Markup that may arrive split across chunks; a trailing prefix of these is held back.
 _PARTIAL_MARKUP = ("<think>", "<ja>", "</ja>")
+_SENTENCE_END = "。！？!?♪…"
+_CLOSERS = "」』）)\"'”’"
 _TAG = re.compile(r"\[\s*([^\[\]\s]{1,10})\s*\]")
 _ALIASES = {
     "기본": "neutral",
@@ -44,6 +46,61 @@ class ReplyParser:
         self.expression = default_expression
         # Japanese line for text-to-speech, written by the model inside <ja>...</ja>.
         self.voice = ""
+        self._voice_taken = 0
+
+    def take_voice(self, final: bool = False) -> list[str]:
+        """New complete Japanese sentences from the <ja> text seen so far (each returned once)."""
+
+        text = _THINK_BLOCK.sub("", self.raw)
+        unfinished_think = text.find("<think>")
+        if unfinished_think != -1:
+            text = text[:unfinished_think]
+        parts: list[str] = []
+        pos = 0
+        while True:
+            start = text.find("<ja>", pos)
+            if start == -1:
+                break
+            start += len("<ja>")
+            end = text.find("</ja>", start)
+            if end == -1:
+                content = text[start:]
+                angle = content.rfind("<")
+                if angle != -1 and "</ja>".startswith(content[angle:]):
+                    content = content[:angle]
+                parts.append(content)
+                break
+            parts.append(text[start:end])
+            pos = end + len("</ja>")
+        joined = "\n".join(parts)
+        pending = joined[self._voice_taken:]
+        sentences: list[str] = []
+        begin = 0
+        i = 0
+        while i < len(pending):
+            ch = pending[i]
+            if ch == "\n":
+                i += 1
+            elif ch in _SENTENCE_END:
+                i += 1
+                while i < len(pending) and (pending[i] in _SENTENCE_END or pending[i] in _CLOSERS):
+                    i += 1
+                if i >= len(pending) and not final:
+                    break  # closing marks may still be on the way
+            else:
+                i += 1
+                continue
+            sentence = pending[begin:i].strip()
+            if sentence:
+                sentences.append(sentence)
+            begin = i
+        if final:
+            rest = pending[begin:].strip()
+            if rest:
+                sentences.append(rest)
+            begin = len(pending)
+        self._voice_taken += begin
+        return sentences
 
     def feed(self, chunk: str) -> str:
         self.raw += chunk

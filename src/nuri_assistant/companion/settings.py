@@ -68,6 +68,11 @@ class CompanionSettings:
     # A full-screen app in front (game, video): no optional lines and no re-raising over it.
     fullscreen_quiet: bool = True
     privacy_shown: bool = False
+    # Optional extras: a line on the hour (8-23 o'clock), and a lighter app for slow PCs
+    # (no voice, fewer idle animations, shorter context for the model).
+    hourly_chime: bool = False
+    last_chime: str = ""
+    light_mode: bool = False
     x: int | None = None
     y: int | None = None
 

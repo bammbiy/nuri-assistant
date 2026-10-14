@@ -17,3 +17,4 @@ USER_CHARACTERS = APP_DIR / "characters"  # personal art, preferred over the bun
 
 ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets" / "characters"
 FONTS_DIR = ASSETS_DIR.parent / "fonts"  # bundled UI font (NanumSquareRound, OFL)
+LAUNCHER = Path(__file__).resolve().parents[1] / "run_nuri.py"  # src/run_nuri.py, what "start with Windows" runs

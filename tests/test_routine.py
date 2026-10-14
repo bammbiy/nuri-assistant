@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, time, timedelta
 
-from src.nuri_assistant.routine import daily_due, duration_text, parse_clock
+from src.nuri_assistant.routine import daily_due, duration_text, hourly_key, parse_clock
 
 
 class ParseClockTest(unittest.TestCase):
@@ -41,6 +41,21 @@ class DurationTextTest(unittest.TestCase):
     def test_wording(self) -> None:
         for minutes, expected in [(40, "40분"), (60, "1시간"), (80, "1시간 20분"), (0, "0분"), (120, "2시간")]:
             self.assertEqual(duration_text(minutes), expected)
+
+
+class HourlyKeyTest(unittest.TestCase):
+    def test_window_and_hours(self) -> None:
+        self.assertEqual(hourly_key(datetime(2026, 10, 6, 15, 2), ""), "2026-10-06T15")
+        self.assertIsNone(hourly_key(datetime(2026, 10, 6, 15, 3), ""))
+        self.assertIsNone(hourly_key(datetime(2026, 10, 6, 7, 0), ""))
+        self.assertEqual(hourly_key(datetime(2026, 10, 6, 8, 0), ""), "2026-10-06T08")
+        self.assertEqual(hourly_key(datetime(2026, 10, 6, 23, 1), ""), "2026-10-06T23")
+
+    def test_only_once_per_hour(self) -> None:
+        key = hourly_key(datetime(2026, 10, 6, 9, 0), "")
+        self.assertIsNone(hourly_key(datetime(2026, 10, 6, 9, 1), key))
+        self.assertEqual(hourly_key(datetime(2026, 10, 6, 10, 0), key), "2026-10-06T10")
+        self.assertEqual(hourly_key(datetime(2026, 10, 7, 9, 0), key), "2026-10-07T09")
 
 
 if __name__ == "__main__":

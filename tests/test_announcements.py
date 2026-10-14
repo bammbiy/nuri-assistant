@@ -1,19 +1,23 @@
 from __future__ import annotations
 
+import random
 import unittest
 from datetime import datetime, timedelta
 
 from src.nuri_assistant.announcements import (
     compose_briefing,
     clipboard_line,
+    chime_line,
     compose_wrapup,
     downloads_line,
+    holiday_line,
     level_up_line,
     nag_line,
     occasion_line,
     presence_line,
     price_alert_line,
     reminder_line,
+    spoken_hour,
     timer_line,
     until_text,
     with_weather,
@@ -21,6 +25,7 @@ from src.nuri_assistant.announcements import (
 from src.nuri_assistant.companion import PERSONAS, get_persona
 from src.nuri_assistant.companion import parse_confirmation
 from src.nuri_assistant.focus import FocusTimer
+from src.nuri_assistant.fun.seasons import Holiday
 from src.nuri_assistant.pricewatch.checker import CheckResult
 from src.nuri_assistant.pricewatch.sources import Offer
 from src.nuri_assistant.pricewatch.store import Watch
@@ -169,6 +174,33 @@ class ConfirmationTest(unittest.TestCase):
         self.assertIs(parse_confirmation(" OK. "), True)
         self.assertIs(parse_confirmation("아니요~"), False)
         self.assertIsNone(parse_confirmation("응 근데 시간 바꿔 줘"))
+
+
+class ChimeHolidayTest(unittest.TestCase):
+    def test_spoken_hour(self) -> None:
+        cases = {0: "새벽 12시", 5: "새벽 5시", 6: "오전 6시", 11: "오전 11시", 12: "낮 12시", 13: "오후 1시",
+                 17: "오후 5시", 18: "저녁 6시", 20: "저녁 8시", 21: "밤 9시", 23: "밤 11시"}
+        for hour, text in cases.items():
+            self.assertEqual(spoken_hour(hour), text, hour)
+
+    def test_chime_line(self) -> None:
+        now = datetime(2026, 10, 6, 15, 0)
+        text, expression = chime_line(get_persona("nuri"), now, random.Random(1))
+        self.assertIn("오후 3시", text)
+        self.assertEqual(expression, "neutral")
+        for persona in PERSONAS.values():
+            for seed in range(5):
+                text, _ = chime_line(persona, now, random.Random(seed))
+                self.assertNotIn("{", text)
+                self.assertIn("오후 3시", text)
+
+    def test_holiday_line(self) -> None:
+        for persona in PERSONAS.values():
+            for holiday in (Holiday("holiday", "크리스마스"), Holiday("season", "봄")):
+                text, expression = holiday_line(persona, holiday)
+                self.assertNotIn("{", text)
+                self.assertIn(holiday.name, text)
+                self.assertEqual(expression, "happy")
 
 
 if __name__ == "__main__":

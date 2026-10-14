@@ -25,6 +25,19 @@ def daily_due(now: datetime, clock: time | None, last_done: str, window: timedel
     return start <= now and (window is None or now < start + window)
 
 
+CHIME_HOURS = range(8, 24)  # on-the-hour chime only in the daytime
+CHIME_WINDOW_MIN = 3  # said within this many minutes after the hour, else skipped
+
+
+def hourly_key(now: datetime, last: str) -> str | None:
+    """'YYYY-MM-DDTHH' when the hour's chime is due (not yet said), else None."""
+
+    if now.minute >= CHIME_WINDOW_MIN or now.hour not in CHIME_HOURS:
+        return None
+    key = now.strftime("%Y-%m-%dT%H")
+    return None if key == last else key
+
+
 def duration_text(minutes: int) -> str:
     """40 -> '40분', 80 -> '1시간 20분', 120 -> '2시간'."""
 

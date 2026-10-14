@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import queue
 import threading
 from typing import Callable
 
@@ -37,6 +38,12 @@ class VoiceSpeaker:
         thread.start()
         return thread
 
+    def stream(self, voice_id: int) -> "VoiceStream":
+        """Start a line that is spoken part by part as the parts arrive."""
+
+        self._generation += 1
+        return VoiceStream(self, self._generation, voice_id)
+
     def _run(self, generation: int, voice_id: int, japanese: str, korean: str) -> None:
         try:
             text = japanese.strip() or (self.translate(korean) if korean.strip() else "")
@@ -57,3 +64,87 @@ class VoiceSpeaker:
                 self.player(audio)
             finally:
                 self.on_end()
+
+
+_DONE = object()
+
+
+class VoiceStream:
+    """Japanese parts spoken in order: part n+1 is synthesized while part n plays."""
+
+    def __init__(self, speaker: VoiceSpeaker, generation: int, voice_id: int) -> None:
+        self._speaker = speaker
+        self._generation = generation
+        self._voice_id = voice_id
+        self._texts: queue.Queue = queue.Queue()
+        self._audio: queue.Queue = queue.Queue()
+        self._count = 0
+        self._count_lock = threading.Lock()
+        self._closed = False
+        self._synth_thread = threading.Thread(target=self._synthesize_loop, daemon=True)
+        self._play_thread = threading.Thread(target=self._play_loop, daemon=True)
+        self._synth_thread.start()
+        self._play_thread.start()
+
+    @property
+    def count(self) -> int:
+        return self._count
+
+    @property
+    def stale(self) -> bool:
+        return self._generation != self._speaker._generation
+
+    def add(self, japanese: str) -> None:
+        text = japanese.strip()
+        if not text:
+            return
+        with self._count_lock:
+            if self._closed:
+                return
+            self._count += 1
+            self._texts.put(text)
+
+    def close(self) -> None:
+        with self._count_lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._texts.put(_DONE)
+
+    def join(self, timeout: float | None = None) -> None:
+        self._synth_thread.join(timeout)
+        self._play_thread.join(timeout)
+
+    def _synthesize_loop(self) -> None:
+        speaker = self._speaker
+        try:
+            while True:
+                text = self._texts.get()
+                if text is _DONE or self.stale:
+                    return
+                try:
+                    audio = speaker.client().synthesize(text, self._voice_id)
+                except VoiceError as exc:
+                    speaker.on_error(str(exc))
+                    return
+                except Exception as exc:  # noqa: BLE001
+                    speaker.on_error(f"음성을 만들지 못했어요: {exc}")
+                    return
+                self._audio.put(audio)
+        finally:
+            self._audio.put(_DONE)
+
+    def _play_loop(self) -> None:
+        speaker = self._speaker
+        while True:
+            audio = self._audio.get()
+            if audio is _DONE:
+                return
+            with speaker._lock:
+                if self.stale:
+                    continue
+                speaker.on_start()
+                try:
+                    speaker.player(audio)
+                finally:
+                    speaker.on_end()

@@ -19,10 +19,11 @@
 ```bash
 python src/run_nuri.py            # 캐릭터 비서 (비서 선택 화면부터). Windows는 start_nuri.bat 더블클릭
 python src/run_nuri.py --classic  # 파일 정리 도구만
+python src/run_nuri.py --autostart  # 윈도우 시작 때 쓰는 실행(비서 선택 화면 없이 바로). 시작 프로그램 등록은 메뉴에서
 python -m nuri_assistant [--classic]   # 같은 실행 (src/ 안에서, 또는 pip install -e . 뒤 어디서나. 설치하면 nuri-assistant 명령도 생김)
 pip install -e .[dev]             # 선택: 개발용 설치(pyflakes). 그림이 assets/에 있어서 편집 설치(-e)만 지원
 python -m unittest discover -s tests                         # 저장소 루트에서 (테스트는 src.nuri_assistant 로 import)
-python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 214개 통과)
+python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 234개 통과)
 python -m pyflakes src tests tools
 pip install -r tools/requirements-frames.txt                 # 프레임 생성 도구용 (앱에는 필요 없음)
 python tools/build_frames.py nuri|sera|yuki|akane|shizuku|hinata|sakura|reika [출력폴더]   # 캐릭터 프레임 재생성
@@ -43,7 +44,7 @@ src/nuri_assistant/
 ├── app.py       main(): --classic 인자, tkinter 확인, 시작 실패 기록·안내창, UI는 여기서 늦게 import
 ├── __main__.py  python -m nuri_assistant
 ├── companion/   personas(캐릭터 8명: 성격·말투·대사 틀·기본 목소리), llm(Ollama 스트리밍+도구 호출),
-│                brain(모델→도구→모델 루프 최대 4회, 대화 기억, 일본어 번역), reply(표정 태그·<think>·<ja> 처리),
+│                brain(모델→도구→모델 루프 최대 4회, 대화 기억, 일본어 번역, 음성 문장 콜백 on_voice), reply(표정 태그·<think>·<ja> 처리, take_voice로 일본어 문장 단위),
 │                memory(캐릭터별 대화), settings(companion.json), affection(캐릭터별 친밀도: 처음·친근·가까움·단짝, 하루 상한),
 │                toolbox(도구 묶음 라우팅, ConfirmingTools 기반 클래스, "응"/"아니" 판정 parse_confirmation)
 ├── schedule/    timeparse(한국어 날짜 해석), store, tools(add/list/cancel_event)
@@ -53,19 +54,21 @@ src/nuri_assistant/
 │                fullscreen(맨 앞 창이 모니터를 덮고 제목 표시줄이 없는지, 창 제목은 안 읽음), touch(쓰다듬기·연타 판정), chatter(혼잣말 간격)
 ├── memo/        기억 수첩: store(사용자에 대한 사실, 모든 캐릭터 공유), tools(remember_fact·forget_fact·list_facts, 확인 카드)
 ├── pcwatch/     켜야 동작: downloads(다운로드에 쌓인 파일 수, 이름만), clipboard(복사한 글에서 날짜·쇼핑 링크 찾기, 저장 안 함)
-├── fun/         fortune(날짜+캐릭터로 정해지는 운세), rps(가위바위보), anniversary(생일·만난 지 N일), tools(today_fortune·play_rps)
+├── fun/         fortune(날짜+캐릭터로 정해지는 운세), rps(가위바위보), anniversary(생일·만난 지 N일), seasons(명절·기념일·계절 첫날, 설날·추석은 2026~2030 표),
+│                tools(today_fortune·play_rps)
 ├── weather/     forecast(Open-Meteo 도시 좌표·오늘 예보, 키 없음), advice(우산·옷차림 문장, 코드가 결정)
 ├── pricewatch/  sources(네이버 쇼핑 검색 API, 상품 페이지 JSON-LD/메타), store, checker(알림 규칙), tools
-├── voice/       voicevox(VOICEVOX 호환 HTTP), speaker(번역→합성→재생 스레드, 최신 대사 우선), player
+├── voice/       voicevox(VOICEVOX 호환 HTTP), speaker(번역→합성→재생 스레드, 최신 대사 우선, stream()으로 문장마다 이어 말하기), player
 ├── classic/     기존 파일 이름 정리 도구와 구매 비서 (--classic, 메뉴 "파일 정리 도구"·"파일/구매 비서")
 │                tools(대화 도구 rename_files·undo_rename, 확인 카드로 실행), core(스캔·이름 규칙·미리보기·실행·되돌리기), metadata(파일 이름에서 날짜·매체·면 추정),
 │                storage(history.sqlite3 이력, profiles.json 작업 프로필), commands(한국어 요청 → 이름 변경 계획),
 │                shopping(구매 체크리스트 점수, 선택 기능인 OpenAI 조사)
-├── paths.py     사용자 데이터 경로(APP_DIR, companion.json, *.sqlite3, profiles.json, error.log, characters/)와 ASSETS_DIR
+├── paths.py     사용자 데이터 경로(APP_DIR, companion.json, *.sqlite3, profiles.json, error.log, characters/)와 ASSETS_DIR, LAUNCHER(src/run_nuri.py)
 ├── db.py        SQLite 연결 헬퍼 connect() (모든 저장소가 씀)
 ├── services.py  캐릭터 앱의 저장소·가격 확인기·타이머·ToolBox 조립 (Tk 없이 만들 수 있음)
-├── announcements.py  AI를 거치지 않는 대사 조립: 일정 알림·잔소리·아침 브리핑(+날씨)·타이머·가격 알림·자리 비움/건강·하루 정리
-├── routine.py   시각 해석(parse_clock), 하루 한 번 시점(daily_due), "1시간 20분" 표기
+├── announcements.py  AI를 거치지 않는 대사 조립: 일정 알림·잔소리·아침 브리핑(+날씨)·타이머·가격 알림·자리 비움/건강·하루 정리·정각·명절
+├── routine.py   시각 해석(parse_clock), 하루 한 번 시점(daily_due), 정각 알림 시점(hourly_key), "1시간 20분" 표기
+├── autostart.py 윈도우 시작 때 켜기: HKCU\…\Run의 값 하나(NuriAssistant)만 쓰고 지움, pythonw로 --autostart
 ├── crashlog.py  error.log 기록과 시작 실패 안내창
 ├── screen.py    창 위치 계산: 작업 영역(작업 표시줄 제외)·모든 모니터 영역, 오른쪽 아래 기본 위치
 └── ui/          theme(색·글꼴·공용 위젯·round_rect·draw_pill). ui/__init__은 아무것도 import하지 않음
@@ -73,14 +76,14 @@ src/nuri_assistant/
     │               art(프레임 찾기·캐시), speech_bubble(말풍선), timer_badge(타이머 배지), chatbox, confirm_card,
     │               picker(비서 선택), placeholder(그림 없는 캐릭터)
     ├── windows/    메뉴에서 여는 파스텔 창: schedule, todo, price(최저가), price_settings, voice_settings,
-    │               conversation_log(대화 기록), memos(기억 수첩), ai_settings(모델·Ollama 주소·대화 기억 길이), focus_dialog(집중 타이머 시간·반복·멈춤),
+    │               conversation_log(대화 기록), memos(기억 수첩), ai_settings(모델·Ollama 주소·대화 기억 길이·가벼운 모드), focus_dialog(집중 타이머 시간·반복·멈춤),
     │               rename_preview(대화 파일 정리의 전체 목록, 확인 카드 "목록" 버튼),
     │               rename_settings(파일 정리 설정: 이름 형식·기본 매체코드·파일 종류·정리된 파일 건너뛰기),
     │               routine_settings(생활 알림 설정: 브리핑·하루 정리 시각, 날씨 도시, 혼잣말 빈도·알림 종류별 끄기·전체 화면 조용히, 자리 비움·쉬는 시간·물 알림),
 │               privacy(첫 실행·메뉴 "개인정보 안내": 밖으로 나가는 것과 보지 않는 것),
     │               cards(카드 목록 창 공용: 두 번 눌러 삭제, 휠 스크롤)
     └── classic/    desktop(파일 정리 도구), assistant(옛 파일/구매 비서 창)
-tests/           test_<영역>.py (classic, companion, schedule, pricewatch, todo_focus_voice, announcements, services, entry, screen, presence, weather, routine, affection, memo, pcwatch, fun, interaction)
+tests/           test_<영역>.py (classic, companion, schedule, pricewatch, todo_focus_voice, announcements, services, entry, screen, presence, weather, routine, affection, memo, pcwatch, fun, interaction, autostart)
 assets/characters/<id>/        상반신 프레임 405×344 + 원본 시트 2장 (reference_sheet, reference_expressions)
 assets/characters/<id>/full/   전신 프레임 405×480
 tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터별 좌표는 CHARACTERS 설정, 의존성은 tools/requirements-frames.txt)
@@ -106,7 +109,7 @@ research_notes/                웹 조사 작업 메모 (git 제외), reports/ �
 2. **날짜 계산은 코드가 한다.** 모델은 사용자 표현("다음 주 화요일 3시", "금요일까지")을 그대로 넘기고 `schedule/timeparse.py`가 해석합니다. 새 표현은 여기에 추가하고 `tests/test_schedule.py`에 사례를 넣습니다.
 3. **가격·날씨는 지어내지 않고, 무료 출처만 쓴다.** 날씨는 키 없는 Open-Meteo이며 도시를 정했을 때만 호출하고, 밖으로 나가는 것은 도시 이름(좌표 찾기)과 좌표뿐입니다. 원칙 4(로컬 우선)의 예외로, 실패하면 날씨 줄만 빠집니다. 누구나 무료로 키를 받는 네이버 쇼핑 검색 API, 또는 상품 페이지의 구조화 데이터만 씁니다. 심사가 필요한 API(쿠팡 파트너스)는 넣지 않고, 자동 조회를 막는 사이트(쿠팡 웹)는 우회해서 긁지 않습니다.
 4. **로컬 우선.** 대화와 번역은 로컬 Ollama, 음성은 로컬 VOICEVOX. API 키는 로컬 설정 파일에만 저장합니다.
-5. **시간이 중요한 알림은 AI를 거치지 않는다.** 일정 알림, 할 일 잔소리, 타이머, 아침 브리핑(날씨 문장 포함), 가격 알림, 돌아옴 인사·쉬는 시간·물 알림, 하루 정리는 페르소나의 대사 틀(`reminder`, `todo_nag`, `focus_done`, `break_done`, `all_done`, `briefing`, `price_alert`, `welcome_back`, `take_break`, `drink_water`, `wrapup`, `level_up`, `birthday`, `together`, 혼잣말 `idle_talk`, 쓰다듬기 `pats`, 연타 `pokes_many`)과 코드가 만든 문장으로 앱이 바로 말합니다. 운세·가위바위보 결과도 코드(`fun/`)가 정하고 모델은 말투만 입힙니다. 음성용 일본어 번역만 로컬 AI를 거치고, 실패해도 말풍선은 나옵니다.
+5. **시간이 중요한 알림은 AI를 거치지 않는다.** 일정 알림, 할 일 잔소리, 타이머, 아침 브리핑(날씨 문장 포함), 가격 알림, 돌아옴 인사·쉬는 시간·물 알림, 하루 정리는 페르소나의 대사 틀(`reminder`, `todo_nag`, `focus_done`, `break_done`, `all_done`, `briefing`, `price_alert`, `welcome_back`, `take_break`, `drink_water`, `wrapup`, `level_up`, `birthday`, `together`, 혼잣말 `idle_talk`, 쓰다듬기 `pats`, 연타 `pokes_many`, 정각 `chime`, 명절 `holiday`, 계절 첫날 `season`)과 코드가 만든 문장으로 앱이 바로 말합니다. 운세·가위바위보 결과도 코드(`fun/`)가 정하고 모델은 말투만 입힙니다. 음성용 일본어 번역만 로컬 AI를 거치고, 실패해도 말풍선은 나옵니다.
 6. **도구를 못 쓰는 모델도 동작해야 한다.** `OllamaToolsUnsupported`가 나면 그 세션은 도구 없이 대화만 합니다.
 7. **캐릭터는 오리지널만, 모두 성인.** 비서 앱이라 체형은 글래머로 통일하되 옷은 입은 상태(세라·유키 수준)로 그립니다. 기존 작품 캐릭터나 실존 작가 그림체를 따라 하지 않습니다. 노출이 있는 이미지는 저장소가 아니라 `~/.nuri-assistant/characters/`에 둡니다.
 
@@ -127,6 +130,7 @@ research_notes/                웹 조사 작업 메모 (git 제외), reports/ �
 - 백그라운드 작업(모델 호출, 가격 조회, 음성 합성)은 스레드에서 돌리고 결과는 `MascotApp.events` 큐에 `("종류", 값...)`으로 넘깁니다. 새 종류는 `_handle_event`의 표에 `_on_<종류>` 메서드로 추가합니다. 스레드에서 Tk 위젯을 직접 만지지 않습니다.
 - 말풍선과 음성을 함께 낼 때는 `MascotApp.talk()`, 말풍선만이면 `say()`. 오류·안내 문구는 읽지 않습니다.
 - 모델 답변의 일본어 음성 대사는 `<ja>…</ja>`로 받고 `ReplyParser.voice`에 담깁니다(말풍선과 대화 기억에는 남기지 않음).
+- 문장 단위 음성: 답변을 보낼 때 `send()`가 `VoiceSpeaker.stream()`을 열고, 모델이 `<ja>` 안에서 문장(。！？!?♪… 또는 줄바꿈)을 끝낼 때마다 `Companion.reply(on_voice=)` → `VoiceStream.add`. 합성은 순서대로 하나씩(VOICEVOX 다중도 1), 앞 문장이 재생되는 동안 다음 문장을 합성. `<ja>`가 하나도 안 왔으면 끝난 뒤 예전처럼 한국어 전체를 번역해 말합니다. 새 `speak()`/`stream()`은 이전 것을 낡은 것으로 만들어 남은 문장을 버립니다(최신 대사 우선). 앱이 스스로 하는 대사(`talk()`)는 지금처럼 한 번에.
 - 파일 이름 규칙은 내부적으로 `{DATE}`·`{YEAR}`·`{MONTH}`·`{DAY}`·`{MEDIA}`·`{PAGE}`(설정 창에는 `{날짜}`·`{연도}`·`{월}`·`{일}`·`{매체}`·`{페이지}`, 변환은 `classic.core.naming`의 `rule_from_korean`/`rule_to_korean`). `{PAGE}`는 필수이고 중괄호 짝이 안 맞는 규칙도 거부(`validate_rule`), `{MEDIA}`가 없으면 매체코드를 묻지 않습니다. 대화 도구는 `CompanionSettings.rename_*`를 `services.rename_options()`로 받아(메모장으로 고친 확장자 `"pdf"`·문자열도 정리) 매번 읽으므로 설정을 바꾸면 바로 적용됩니다. 요청 문장에 규칙을 말하면("매체-날짜 순") 그쪽이 우선.
 - 생활 알림: 아침 브리핑은 `briefing_time`이 비면 앱을 켤 때 하루 한 번, 정하면 그 시각부터 하루 한 번(`last_briefing`). 하루 정리는 `wrapup_time`(기본 18:00)부터 3시간 안에만(`WRAPUP_WINDOW`, 늦게 켠 날은 건너뜀). 두 줄이 같은 폴링에 겹치지 않게 한 번에 하나. 자리 비움은 `presence.idle_seconds()`(Windows만, 다른 OS는 None이라 꺼짐)를 30초마다 `PresenceTracker`에 넣고, 앱이 바쁘거나 확인 카드·비서 선택·집중 타이머 중이면 `quiet`: 돌아옴 인사와 물 알림은 미루고 연속 사용 시간은 새로 셉니다.
 - 친밀도(`companion/affection.py`): 대화 답변 +1(하루 30), 확인 카드 승인 +1, 할 일 완료 +3, 10분 이상 집중 +3, 캐릭터별 하루 최대 40점, 내려가지 않음. 단계가 오르면 답변·카드가 끝난 뒤 `level_up` 대사. 시스템 프롬프트에 단계 이름과 기억 수첩의 최근 30개(`MAX_FACTS`)가 `Companion(context=...)`로 매 메시지 들어갑니다(모델 스레드에서 읽으니 SQLite만 만짐).
@@ -136,6 +140,9 @@ research_notes/                웹 조사 작업 메모 (git 제외), reports/ �
 - 선택 대사의 공통 조건은 `MascotApp._optional_ok()`(전체 화면·바쁨·확인 카드·비서 선택 중이면 아님): 혼잣말·쓰다듬기 반응 외에 돌아옴 인사·레벨업·다운로드·복사한 글·브리핑·하루 정리·기념일이 이걸 보고 미룹니다(날짜를 저장하지 않으니 나중에 나옴).
 - 전체 화면 조용 모드(`fullscreen_quiet`, 기본 켬): `_stay_visible`(3초)이 맨 앞 창이 우리 창·바탕화면·작업 표시줄이 아니고 모니터를 덮으며 `WS_CAPTION`이 없으면 전체 화면으로 봅니다(자동 숨김 작업 표시줄의 최대화 창 제외). 그동안 `-topmost`를 풀고 다시 걸지 않으며, 끝나면 다시 겁니다. 시간이 중요한 알림(일정·할 일·타이머·가격)은 그대로 나와 소리와 음성은 들리지만 말풍선은 게임 뒤에 가려질 수 있습니다(알려진 한계).
 - 첫 실행 개인정보 안내: `privacy_shown`이 거짓이면 비서를 고른 뒤 2.5초에 `PrivacyWindow`, 닫으면 참. 메뉴에서 다시 열 수 있음. 밖으로 나가는 것을 새로 추가하면 이 창 문구도 고칩니다.
+- 정각 알림(`hourly_chime`, 기본 꺼짐): 8~23시 정각부터 3분 안(`CHIME_WINDOW_MIN`)에 `_routine_step`이 한 번(`last_chime` = "YYYY-MM-DDTHH"), 브리핑·하루 정리·기념일 뒤 1분이 지나야. 바쁘거나 전체 화면이면 그 시각은 건너뜀. 명절·계절 첫날은 기념일과 같은 자리(`last_occasion`, `notify_occasion`)에서 생일·N일이 없는 날에만. 설날·추석은 `fun/seasons.py` 표가 2030년까지라 그 뒤는 표를 늘려야 함.
+- 가벼운 모드(`light_mode`, AI 설정): 음성 끔(`_voice_on()`이 거짓, 시스템 프롬프트에도 `<ja>` 요청 안 함), 깜박임 간격 2배(`LIGHT_SLOWDOWN`), 대기 표정 바꾸기 없음, Ollama `num_ctx` 2048(`LIGHT_OPTIONS`). 작은 모델(`qwen3:4b`)은 권유만 하고 자동으로 바꾸지 않음.
+- 윈도우 시작 때 켜기(`autostart.py`, 메뉴 체크): 설정 파일이 아니라 레지스트리 값이 진실. 켜면 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`에 `NuriAssistant` = `"pythonw.exe" "…\src\run_nuri.py" --autostart`, 끄면 그 값만 지움. 기본 꺼짐, Windows 아니면 메뉴가 회색. `--autostart`로 켜지면 비서 선택 화면 없이 마지막 캐릭터로 시작. 저장소 폴더를 옮기면 다시 켜야 함.
 - 설정 항목을 추가할 때는 `CompanionSettings`에 기본값과 함께 넣습니다. 알 수 없는 키는 로드 시 무시되므로 옛 설정 파일도 열립니다.
 
 ## UI 관례
@@ -182,8 +189,8 @@ research_notes/                웹 조사 작업 메모 (git 제외), reports/ �
 ## 남은 일
 
 - 실제 PC(Windows)에서 종합 확인: 자리 비움 감지(GetLastInputInfo)와 실제 Open-Meteo 응답, Ollama 도구 호출, VOICEVOX 음성과 기본 목소리 id, 네이버 API(쿠팡 상품 포함 여부), 투명 배경, 고배율 화면(앱이 DPI 인식을 하지 않아 125%·150%에서 Windows가 창을 늘려 그림이 흐릴 수 있음 — 확인 후 `SetProcessDpiAwareness` 검토), 오른쪽 아래 위치·항상 위 유지
-- 웹 조사(`reports/데스크톱 AI 비서 사용자 요구.md`)의 남은 추천 후보(1~4번은 2026-10-14에 넣음): 문장 단위 음성, 정시·계절 대사, 가벼운 모드, 자동 시작, iCal 캘린더 읽기, 누르고 말하기, 여러 캐릭터 대화, 메일·문서. 화면 상시 캡처는 넣지 않기로 권고.
-- 실사용 확인 전: 전체 화면 판정(게임·영상·발표, 테두리 없는 창 모드 게임, 듀얼 모니터), 혼잣말 빈도가 적당한지, 쓰다듬기 판정 감도.
+- 웹 조사(`reports/데스크톱 AI 비서 사용자 요구.md`)의 남은 추천 후보(1~8번은 2026-10-14에 넣음): iCal 캘린더 읽기, 누르고 말하기, 여러 캐릭터 대화, 메일·문서. 화면 상시 캡처는 넣지 않기로 권고.
+- 실사용 확인 전: 전체 화면 판정(게임·영상·발표, 테두리 없는 창 모드 게임, 듀얼 모니터), 혼잣말 빈도가 적당한지, 쓰다듬기 판정 감도, 문장 단위 음성이 실제 VOICEVOX에서 끊김 없이 이어지는지(문장 사이 입 멈춤), 8B 모델이 `<ja>`를 문장 부호로 잘 끊는지, 시작 프로그램 등록(pythonw 경로·Microsoft Store Python), qwen3:4b의 도구 호출 품질.
 - 이전에 넣은 것 중 실사용 확인 전: 복사한 글 도우미(Windows 클립보드), 다운로드 감시(실제 다운로드 폴더 위치), 기억 수첩이 8B 모델에서 너무 자주/드물게 제안되는지, 친밀도 상승 속도(하루 40점이면 단짝까지 약 1주).
 - 대화 파일 정리의 다음 단계(원하면): 파일 이름에서 날짜·매체를 파일마다 읽는 모드(파일 정리 도구의 `infer_metadata` 방식), 실제 Windows 폴더(OneDrive 바탕 화면 등)에서 확인
 - 캐릭터 그림은 8명 모두 완료(2026-10-07). 새 캐릭터를 더 만들 때 시트 생성 프롬프트는 기존 시트를 첨부하고 그림체를 문장으로 고정해야 함(제미나이가 그림체를 잘 못 맞춤, `assets/characters/README.md`. 표정 시트는 새 대화에서 그 캐릭터 기본 시트 한 장만 첨부해야 함(여러 장 붙이면 첨부 이미지를 겹쳐 넣음). 끝까지 겹치면 표정을 한 칸씩 6장 받아 3×2로 이어 붙여 씀)

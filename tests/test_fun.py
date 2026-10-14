@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 from src.nuri_assistant.fun import (CHOICES, FunTools, Occasion, fortune_text, normalize,
                                     occasion_today, parse_birthday, play, today_fortune)
+from src.nuri_assistant.fun.seasons import Holiday, holiday_today
 
 
 class FortuneTests(unittest.TestCase):
@@ -114,6 +115,31 @@ class FunToolsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             tools.confirm(object())
         self.assertFalse(tools.execute("nope", {}).get("ok", False))
+
+
+class SeasonsTests(unittest.TestCase):
+    def test_fixed_dates(self):
+        cases = {(1, 1): "새해", (2, 14): "밸런타인데이", (3, 14): "화이트데이", (10, 31): "핼러윈",
+                 (11, 11): "빼빼로데이", (12, 24): "크리스마스 이브", (12, 25): "크리스마스",
+                 (12, 31): "한 해 마지막 날"}
+        for (m, d), name in cases.items():
+            self.assertEqual(holiday_today(date(2026, m, d)), Holiday("holiday", name), name)
+
+    def test_lunar_table(self):
+        self.assertEqual(holiday_today(date(2026, 2, 17)), Holiday("holiday", "설날"))
+        self.assertEqual(holiday_today(date(2030, 2, 3)), Holiday("holiday", "설날"))
+        self.assertEqual(holiday_today(date(2026, 9, 25)), Holiday("holiday", "추석"))
+        self.assertEqual(holiday_today(date(2030, 9, 12)), Holiday("holiday", "추석"))
+
+    def test_seasons_and_ordinary(self):
+        for (m, d), name in {(3, 1): "봄", (6, 1): "여름", (9, 1): "가을", (12, 1): "겨울"}.items():
+            self.assertEqual(holiday_today(date(2026, m, d)), Holiday("season", name))
+        self.assertIsNone(holiday_today(date(2026, 10, 14)))
+        self.assertIsNone(holiday_today(date(2031, 2, 17)))
+
+    def test_holiday_beats_season(self):
+        # no fixed holiday shares a date with a season start today; a lunar one would still win
+        self.assertEqual(holiday_today(date(2026, 3, 14)).kind, "holiday")
 
 
 if __name__ == "__main__":

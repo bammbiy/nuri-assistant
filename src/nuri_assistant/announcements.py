@@ -6,6 +6,7 @@ through the model (CLAUDE.md principle 5). Kept free of Tk so they can be unit-t
 
 from __future__ import annotations
 
+import random
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
@@ -15,6 +16,7 @@ from .routine import duration_text
 if TYPE_CHECKING:
     from .companion.personas import Persona
     from .focus.timer import FocusTimer
+    from .fun.seasons import Holiday
     from .pricewatch.checker import CheckResult
     from .schedule.store import Event
     from .todo.store import Todo
@@ -68,6 +70,28 @@ def compose_briefing(persona: Persona, events: list[Event], urgent: list[Todo], 
         parts.append("할 일: " + ", ".join(f"{t.title}({t.d_day(today)})" for t in urgent[:BRIEFING_MAX_TODOS])
                      + (f" 외 {len(urgent) - BRIEFING_MAX_TODOS}개" if len(urgent) > BRIEFING_MAX_TODOS else ""))
     return "\n".join(parts), headline
+
+
+def spoken_hour(hour: int) -> str:
+    """0 -> '새벽 12시', 9 -> '오전 9시', 12 -> '낮 12시', 15 -> '오후 3시', 19 -> '저녁 7시', 22 -> '밤 10시'."""
+
+    if hour == 12:
+        return "낮 12시"
+    word = "새벽" if hour < 6 else "오전" if hour < 12 else "오후" if hour < 18 else "저녁" if hour < 21 else "밤"
+    return f"{word} {hour % 12 or 12}시"
+
+
+def chime_line(persona: Persona, now: datetime, rng=random) -> tuple[str, str]:
+    """(text, expression) for the on-the-hour chime."""
+
+    return rng.choice(persona.chime).format(hour=spoken_hour(now.hour)), "neutral"
+
+
+def holiday_line(persona: Persona, holiday: Holiday) -> tuple[str, str]:
+    """(text, expression) for a holiday or the first day of a season."""
+
+    template = persona.holiday if holiday.kind == "holiday" else persona.season
+    return template.format(name=holiday.name), "happy"
 
 
 def timer_line(persona: Persona, timer: FocusTimer, event: str) -> tuple[str, str]:

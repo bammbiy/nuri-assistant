@@ -18,7 +18,8 @@ CHATTER_CHOICES = ("많이", "보통", "조금", "끄기")
 NOTIFY_CHOICES = (
     ("notify_welcome", "돌아왔을 때 인사"),
     ("notify_level_up", "친해졌을 때 한마디"),
-    ("notify_occasion", "생일·기념일 축하"),
+    ("notify_occasion", "생일·기념일·명절·계절 첫날 축하"),
+    ("hourly_chime", "정각마다 시간 알려 주기 (오전 8시~밤 11시)"),
     ("fullscreen_quiet", "전체 화면(게임·영상)일 때는 조용히, 위로 올라오지도 않기"),
 )
 

@@ -9,6 +9,7 @@ import sys
 def main() -> None:
     parser = argparse.ArgumentParser(description="Nuri Assistant")
     parser.add_argument("--classic", action="store_true", help="캐릭터 없이 파일 정리 도구만 실행합니다.")
+    parser.add_argument("--autostart", action="store_true", help=argparse.SUPPRESS)  # started with Windows (Run key)
     args = parser.parse_args()
     try:
         import tkinter  # checked first: some Python installs ship without it
@@ -30,7 +31,7 @@ def main() -> None:
         else:
             from .ui.character.mascot import run_mascot
 
-            run_mascot()
+            run_mascot(with_windows=args.autostart)
     except Exception:
         path = log_exception(*sys.exc_info())
         where = f"\n\n자세한 내용: {path}" if path else ""
