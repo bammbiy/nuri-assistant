@@ -83,6 +83,7 @@ assets/characters/<id>/        상반신 프레임 405×344 + 원본 시트 2장
 assets/characters/<id>/full/   전신 프레임 405×480
 tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터별 좌표는 CHARACTERS 설정, 의존성은 tools/requirements-frames.txt)
 tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창의 검은 테두리 방지, 여러 번 돌려도 같음)
+research_notes/                웹 조사 작업 메모 (git 제외), reports/ 조사 보고서
 .claude/agents/                서브 에이전트: searcher·helper(Haiku, 검색·단순 반복), worker(Sonnet, 구현), reviewer(Sonnet, 검토)
 ```
 
