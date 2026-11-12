@@ -20,6 +20,7 @@
 - 사용자: 한국어 사용자, PC는 RTX 3060 Ti(8GB VRAM) + RAM 32GB, Windows
 - UI 문구와 캐릭터 대사는 모두 한국어, 음성만 일본어
 - 올리는 방식(사용자 지시): PR 없이 `main`에 바로 올립니다. 세션의 작업 브랜치(`claude/pensive-archimedes-kwhp16`)에서 커밋하고, 같은 커밋을 작업 브랜치와 `main`에 함께 푸시합니다(`git push origin HEAD:main`, 빨리 감기만. 강제 푸시는 하지 않음)
+- 커밋 작성자(사용자 지시): 커밋이 사용자 계정으로 보이게, 세션을 시작하면 커밋 전에 `git config user.name "bammbiy"`와 `git config user.email "83348724+bammbiy@users.noreply.github.com"`(깃허브의 비공개용 주소)을 설정합니다. 컨테이너가 새로 만들어지면 설정이 사라지니 매번 확인합니다
 
 ## 실행과 테스트
 
