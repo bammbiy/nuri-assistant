@@ -49,7 +49,7 @@ src/nuri_assistant/
 │               privacy(첫 실행·메뉴 "개인정보 안내": 밖으로 나가는 것과 보지 않는 것),
     │               cards(카드 목록 창 공용: 두 번 눌러 삭제, 휠 스크롤)
     └── classic/    desktop(파일 정리 도구), assistant(옛 파일/구매 비서 창)
-tests/           test_<영역>.py (classic, companion, schedule, pricewatch, todo_focus_voice, announcements, services, entry, screen, presence, weather, routine, affection, memo, pcwatch, fun, interaction, autostart)
+tests/           test_<영역>.py (ui_smoke: 앱을 띄워 메뉴의 창을 모두 여는 확인, classic, companion, schedule, pricewatch, todo_focus_voice, announcements, services, entry, screen, presence, weather, routine, affection, memo, pcwatch, fun, interaction, autostart)
 assets/characters/<id>/        상반신 프레임 405×344 + 원본 시트 2장 (reference_sheet, reference_expressions)
 assets/characters/<id>/full/   전신 프레임 405×480
 tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터별 좌표는 CHARACTERS 설정, 의존성은 tools/requirements-frames.txt)
