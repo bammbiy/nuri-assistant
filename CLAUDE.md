@@ -19,7 +19,7 @@
 
 - 사용자: 한국어 사용자, PC는 RTX 3060 Ti(8GB VRAM) + RAM 32GB, Windows
 - UI 문구와 캐릭터 대사는 모두 한국어, 음성만 일본어
-- 개발 브랜치: `claude/pensive-archimedes-kwhp16` (원격에 푸시, PR은 요청이 있을 때만)
+- 올리는 방식(사용자 지시): PR 없이 `main`에 바로 올립니다. 세션의 작업 브랜치(`claude/pensive-archimedes-kwhp16`)에서 커밋하고, 같은 커밋을 작업 브랜치와 `main`에 함께 푸시합니다(`git push origin HEAD:main`, 빨리 감기만. 강제 푸시는 하지 않음)
 
 ## 실행과 테스트
 
