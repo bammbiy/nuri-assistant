@@ -10,7 +10,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nuri-assistant"
 version = "0.1.0"
-description = "바탕화면 캐릭터 비서: 로컬 AI(Ollama)와 한국어로 대화하고 일정·할 일·집중 타이머·최저가 알림을 챙깁니다."
+description = "Desktop character assistant for Windows: chats in Korean through a local AI (Ollama) and keeps your schedule, to-dos, focus timer and price alerts."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []  # stdlib only at runtime; tkinter ships with the python.org Windows installer

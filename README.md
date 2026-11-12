@@ -1,176 +1,180 @@
 # Nuri Assistant
 
-## 데스크톱 캐릭터 비서
+English | [한국어](README.ko.md)
 
-Windows에서는 `start_nuri.bat`을 더블클릭하거나 `python src/run_nuri.py`를 실행하면 바탕화면 오른쪽 아래(작업 표시줄 바로 위)에 애니메이션풍 캐릭터가 항상 위로 떠 있습니다. 끌어서 옮기면 그 위치를 기억합니다(두 번째 모니터도 가능). 캐릭터에 마우스를 올리면 바로 아래에 채팅창이 나타나고, 마우스를 치우면 잠시 뒤 사라집니다. 채팅창에 말을 걸면 내 PC에서 돌아가는 AI(Ollama)가 캐릭터 말투로 대답합니다. 대화 내용은 인터넷으로 나가지 않습니다.
+The app itself speaks Korean: menus, speech bubbles and character lines are Korean, and the optional voice is Japanese.
 
-- 앱을 켜면 비서 선택 화면이 먼저 나옵니다. "다음부터 이 화면 없이 바로 시작"을 체크하면 마지막 비서로 바로 시작하고, 메뉴의 `비서 선택…`에서 언제든 바꿀 수 있습니다.
-- 비서 8명:
-  - **누리**: 다정한 후배 비서, 사용자를 '선배'라고 부름. 기본 캐릭터
-  - **세라**: 어른스러운 누나 비서, 사용자를 '동생'이라고 부름
-  - **유키**: 나긋나긋한 힐링계 비서, 사용자를 '자기'라고 부름
-  - 아카네(츤데레), 시즈쿠(쿠데레), 히나타(백갸루 소꿉친구), 사쿠라(메이드), 레이카(오죠사마)
-- 답변 내용에 따라 표정이 바뀝니다 (기본, 웃음, 생각, 놀람, 슬픔, 화남, 부끄럼). 말하는 동안 입이 움직이고, 가끔 눈을 깜빡입니다.
-- 실행 중 오류가 나면 안내창이 뜨고 `~/.nuri-assistant/error.log`에 자세한 내용이 남습니다. 앱이 켜지지 않으면 이 파일을 확인하세요.
-- 대화는 캐릭터별로 `~/.nuri-assistant/companion.sqlite3`에 저장되고, 최근 대화를 기억한 채 이어서 말합니다.
-- 메뉴의 `전신으로 보기`를 켜면 상반신 대신 전신으로 나옵니다 (8명 모두). 전신에서도 표정, 입 움직임, 깜빡임이 그대로 나오고, 창은 발 위치를 유지한 채 위로 커집니다.
-- 캐릭터를 드래그하면 위치를 옮길 수 있고, 클릭하면 반응하면서 채팅창에 바로 입력할 수 있게 됩니다. 위치는 저장됩니다.
-- 오른쪽 클릭이나 채팅창 왼쪽의 `⋯` 버튼으로 메뉴를 엽니다: 비서 선택, 전신으로 보기, 내 이름 설정, AI 모델 설정, 일정 보기, 오늘 일정 브리핑, 할 일, 집중 타이머, 최저가 알림, 가격 알림 설정, 음성 설정, 대화 기록 보기, 기억 지우기, 파일 정리 도구, 파일/구매 비서, 종료
-- 8명 모두 일러스트 이미지로 나옵니다(그림 파일이 없으면 도형으로 그린 임시 캐릭터). 오른쪽 클릭이나 `⋯` 메뉴의 `대화 기록 보기`에서 지난 대화를 볼 수 있습니다. 그림 넣는 법과 AI 생성 프롬프트는 [assets/characters/README.md](assets/characters/README.md)에 있습니다.
-- **일정 관리**: "내일 오후 3시에 치과 잡아줘", "이번 주 일정 알려줘", "내일 회의 취소해" 처럼 말로 관리합니다.
-  - 등록과 취소는 캐릭터 아래에 뜨는 확인 카드에서 `등록`/`취소`를 누르거나 "응", "아니"라고 입력해야 실제로 반영됩니다.
-  - 날짜와 시간은 AI가 계산하지 않고, 앱이 한국어 표현("다음 주 화요일 10시", "세 시 반", "30분 뒤", "10월 20일")을 직접 해석합니다. 오전·오후를 말하지 않으면 1~6시는 오후로 봅니다.
-  - 일정 10분 전(하루 종일 일정은 그날 오전 9시)에 캐릭터가 먼저 알려 줍니다. "30분 전에 알려줘"처럼 알림 시간을 바꿀 수 있습니다.
-  - 그날 처음 켜면 오늘 일정을 브리핑합니다. 메뉴의 `일정 보기`에서 목록을 보고 삭제할 수 있습니다.
-  - 일정 기능은 도구 호출(tool calling)을 지원하는 모델이 필요합니다. 기본 모델 `qwen3:8b`는 지원합니다. 지원하지 않는 모델을 고르면 대화만 됩니다.
-- **최저가 알림**: "에어팟 프로 30만원 아래로 떨어지면 알려줘", "로지텍 마우스 최저가 얼마야?"처럼 말합니다.
-  - 가격은 무료로 쓸 수 있는 곳에서만 가져옵니다: 네이버 쇼핑 검색 API(누구나 무료 발급, 하루 25,000회, 네이버 쇼핑에 올라온 여러 쇼핑몰의 최저가). 상품 링크로도 감시할 수 있지만(키 불필요), 쿠팡처럼 자동 조회를 막는 사이트는 상품 이름으로 감시해야 합니다.
-  - 메뉴의 `가격 알림 설정…`에서 네이버 API 키와 확인 주기(기본 60분)를 넣습니다. 키는 `~/.nuri-assistant/companion.json`에만 저장됩니다.
-  - 목표가 이하가 되거나(목표가가 없으면) 최저가가 새로 내려가면 캐릭터가 알려 주고, 말풍선을 누르면 상품 페이지가 열립니다.
-  - 메뉴의 `최저가 알림` 창에서 AI 없이 직접 추가·삭제하고 현재 가격과 지금까지의 최저가를 볼 수 있습니다.
-- **할 일**: "보고서 금요일까지 해야 해"라고 하면 확인 카드를 거쳐 추가됩니다. "보고서 끝냈어"라고 하면 완료 카드가 뜹니다.
-  - 마감 전날 저녁 7시와 당일 아침 9시에 캐릭터가 잔소리합니다. 기한이 지난 할 일은 아침 브리핑에 나옵니다.
-  - 메뉴의 `할 일` 창에서 직접 추가하고, 동그라미를 눌러 완료하고, D-day를 볼 수 있습니다.
-- **집중 타이머**: "25분 집중 모드", "50분 집중 10분 휴식 2번"처럼 말하거나 메뉴의 `집중 타이머 시작`을 누릅니다. 캐릭터 옆에 남은 시간 배지가 뜨고(누르면 멈춤), 집중·휴식이 끝날 때마다 캐릭터가 알려 줍니다.
-- **일본어 음성**: 말풍선은 한국어, 목소리는 일본어 애니 보이스입니다.
-  - 무료 음성 엔진 [VOICEVOX](https://voicevox.hiroshiba.jp/)를 설치해서 켜 두고, 메뉴의 `음성 설정…`에서 `음성으로 말하기`를 켭니다. 같은 방식으로 동작하는 AivisSpeech도 쓸 수 있습니다.
-  - AI 답변은 AI가 일본어 대사를 함께 써서(`<ja>…</ja>`, 말풍선에는 안 보임) 그대로 읽고, 앱이 만드는 대사(알림, 브리핑 등)는 로컬 AI가 일본어로 번역해서 읽습니다.
-  - 캐릭터마다 어울리는 기본 목소리가 정해져 있고(예: 아카네 = 四国めたん ツンツン), 음성 설정에서 바꾸고 미리 들어볼 수 있습니다.
-  - VOICEVOX 캐릭터 음성을 공개 콘텐츠에 쓸 때는 'VOICEVOX:캐릭터명' 표기 등 각 캐릭터의 이용 규약을 따라야 합니다.
-- **생활 알림** (메뉴 `생활 알림 설정…`): 정한 시각(또는 앱을 켤 때)에 아침 브리핑과 날씨·우산·옷차림(도시를 적으면, 키 없는 무료 날씨 서비스), 저녁엔 "오늘 집중 3번·끝낸 일·내일 첫 일정" 하루 정리(메뉴 `오늘 하루 정리`로 언제든). Windows에서는 30분 넘게 자리를 비웠다 오면 반겨 주고, 오래 앉아 있으면 쉬자고, 정한 간격마다 물 마시자고 말합니다(키보드·마우스를 마지막으로 쓴 시각만 보고 입력 내용은 읽지 않음, 집중 타이머 중에는 미룸).
-- **친밀도와 기억 수첩**: 대화하고 할 일·집중을 끝낼수록 캐릭터와 친해지고(처음→친근→가까움→단짝, 메뉴 `우리 사이`), 단계가 오르면 특별한 대사를 합니다. "나 고양이 알레르기 있어"처럼 말하면 기억해도 되는지 확인 카드로 묻고, 승인한 것은 대화에서 자연스럽게 꺼냅니다(메뉴 `기억 수첩`에서 보고 지우기).
-- **복사한 글·다운로드 도우미** (기본 꺼짐): 날짜가 든 글을 복사하면 일정 카드, 쇼핑 링크를 복사하면 가격 알림 카드를 띄웁니다(생활 알림 설정). 다운로드 폴더에 정리 안 된 파일이 쌓이면 하루 한 번 정리 미리보기를 보여 줍니다(파일 정리 설정). 복사한 글은 저장하지 않고, 다운로드는 파일 이름만 봅니다.
-- **재미**: "오늘 운세 봐줘", "가위바위보 하자, 바위!" (결과는 앱이 정하고 캐릭터가 말투로 전함), 메뉴 `오늘의 운세`. 생일(생활 알림 설정에 적으면)과 처음 만난 지 100일·1년 같은 날엔 축하해 줍니다.
-- **눈치와 반응**: 가만히 있으면 가끔 혼잣말을 하고(생활 알림 설정에서 많이·보통·조금·끄기, 인사·레벨업·기념일은 따로 끄기), 머리를 마우스로 쓰다듬거나 여러 번 누르면 반응해요. 게임·영상이 전체 화면이면 위로 올라오지 않고 조용히 기다려요. 처음 켜면 무엇이 PC 밖으로 나가고 무엇을 보지 않는지 알려 줘요(메뉴 `개인정보 안내`).
-- **더 빠른 목소리와 작은 즐거움**: 답변이 다 끝나길 기다리지 않고 일본어 음성을 한 문장씩 바로 말해요. 원하면 정각마다 시간을 알려 주고(생활 알림 설정), 설날·추석·크리스마스 같은 날과 계절이 바뀌는 날엔 한마디 해요.
-- **가벼운 모드와 자동 시작**: 느린 PC라면 AI 설정의 `가벼운 모드`(음성 끔·움직임 줄임·작은 모델 권유). 메뉴 `윈도우 시작할 때 켜기`로 PC를 켜면 바로 비서가 나와요(끄면 깨끗이 지워져요).
-- **편해진 메뉴**: `집중 타이머…`(시간·쉬는 시간·반복, 멈추기), `AI 설정…`(모델·Ollama 주소·대화 기억 길이), 일정 창에서 바로 추가, 최저가 창의 가격 변동 그래프.
-- **파일 이름 정리**: "다운로드 폴더 20260715 ja00 3페이지부터 이름 정리해줘"처럼 말하면 문서·이미지 파일 이름을 `20260715_ja00_003.pdf` 규칙으로 바꿀 미리보기를 보여 주고, 확인 카드의 `정리`를 눌러야 바뀝니다. 카드의 `목록`을 누르면 바뀔 파일 전체(원래 이름 → 새 이름, 겹치는 파일)를 창으로 보고 거기서 바로 정리·취소할 수 있습니다. "방금 거 되돌려줘"로 마지막 정리를 원래대로 돌릴 수 있습니다(역시 확인 후). 폴더는 다운로드·바탕화면·문서·사진 또는 전체 경로, 한 번에 300개까지. 메뉴의 `파일 정리 설정…`에서 이름 형식(`{날짜}_{매체}_{페이지}`, `{연도}-{월}-{일}_{페이지}` 등 칸을 눌러 직접 조합, 바로 예시가 보임), 말로 안 했을 때 쓸 기본 매체코드, 정리할 파일 종류, 이미 정리된 파일을 건너뛰고 번호를 이어 붙일지를 정할 수 있습니다.
-- 개발 안내는 [CLAUDE.md](CLAUDE.md), 개발 기록은 [HISTORY.md](HISTORY.md)에 있습니다.
+## Desktop character assistant
 
-### Python 없이 실행 (Windows exe)
+On Windows, double-click `start_nuri.bat` or run `python src/run_nuri.py`. An anime-style character stays on top at the bottom right of your desktop, just above the taskbar. Drag it to move it and the position is remembered (a second monitor works too). Hover over the character and a chat window appears right below it. Move the mouse away and it disappears after a moment. When you talk in the chat window, an AI running on your own PC (Ollama) answers in the character's voice. Your conversations never go out to the internet.
 
-GitHub 저장소의 Actions 탭에서 가장 최근 `tests` 실행을 열고 Artifacts의 `NuriAssistant-windows`를 받아 압축을 푼 뒤 `NuriAssistant.exe`를 실행합니다. Python은 들어 있어서 따로 설치하지 않아도 됩니다. Ollama(와 음성을 쓰려면 VOICEVOX)는 아래처럼 따로 준비합니다. 서명이 없는 프로그램이라 처음 실행할 때 Windows가 경고하면 "추가 정보"를 누른 뒤 "실행"을 고릅니다. 직접 만들려면 `pip install pyinstaller pillow` 뒤 `python tools/build_exe.py`.
+- When you start the app, the assistant selection screen comes first. If you check "다음부터 이 화면 없이 바로 시작" (start directly without this screen next time), it starts with the last assistant right away, and you can change it any time from `비서 선택…` (choose assistant) in the menu.
+- 8 assistants:
+  - **Nuri**: a kind junior assistant who calls the user 'senpai'. The default character
+  - **Sera**: a mature older-sister assistant who calls the user 'little brother/sister'
+  - **Yuki**: a soft-spoken, soothing assistant who calls the user 'darling'
+  - Akane (tsundere), Shizuku (kuudere), Hinata (white gyaru childhood friend), Sakura (maid), Reika (ojou-sama)
+- The expression changes with the content of the reply (neutral, smile, thinking, surprised, sad, angry, shy). The mouth moves while she talks, and she blinks now and then.
+- If an error occurs while running, a dialog appears and the details are written to `~/.nuri-assistant/error.log`. If the app does not start, check this file.
+- Conversations are saved per character in `~/.nuri-assistant/companion.sqlite3`, and she continues the talk remembering recent conversations.
+- Turn on `전신으로 보기` (show full body) in the menu to see the full body instead of the upper body (all 8 characters). Expressions, mouth movement, and blinking work the same in full body, and the window grows upward while keeping the feet in place.
+- Drag the character to move it. Click it and it reacts, and you can type into the chat window right away. The position is saved.
+- Open the menu with a right click or the `⋯` button on the left of the chat window: choose assistant, show full body, set my name, AI model settings, view schedule, today's schedule briefing, to-dos, focus timer, lowest price alerts, price alert settings, voice settings, view chat history, clear memory, file renaming tool, file/shopping assistant, quit
+- All 8 are shown as illustrations (a temporary character drawn with shapes is used if there is no image file). You can see past conversations from `대화 기록 보기` (view chat history) in the right-click or `⋯` menu. How to add images and the AI generation prompts are in [assets/characters/README.md](assets/characters/README.md).
+- **Schedule management**: manage it by talking, for example "내일 오후 3시에 치과 잡아줘" (book the dentist tomorrow at 3 PM), "이번 주 일정 알려줘" (tell me this week's schedule), "내일 회의 취소해" (cancel tomorrow's meeting).
+  - Adding and cancelling take effect only after you press `등록` (register) or `취소` (cancel) on the confirmation card that appears below the character, or type "응" (yes) or "아니" (no).
+  - The AI does not calculate dates and times. The app interprets Korean expressions itself ("다음 주 화요일 10시" next Tuesday at 10, "세 시 반" half past three, "30분 뒤" in 30 minutes, "10월 20일" October 20). If you do not say AM or PM, 1 to 6 o'clock is taken as PM.
+  - The character tells you 10 minutes before an event (9 AM that day for all-day events). You can change the notice time, for example "30분 전에 알려줘" (tell me 30 minutes before).
+  - The first time you start it each day, it briefs you on today's schedule. In `일정 보기` (view schedule) in the menu you can see the list and delete items.
+  - The schedule feature needs a model that supports tool calling. The default model `qwen3:8b` supports it. If you choose a model that does not, only chat works.
+- **Lowest price alerts**: say things like "에어팟 프로 30만원 아래로 떨어지면 알려줘" (tell me if AirPods Pro drops below 300,000 won) or "로지텍 마우스 최저가 얼마야?" (what is the lowest price of the Logitech mouse?).
+  - Prices are fetched only from free sources: the Naver Shopping search API (free for anyone to get, 25,000 calls per day, lowest prices from the many stores listed on Naver Shopping). You can also watch by product link (no key needed), but sites that block automated lookups, such as Coupang, must be watched by product name.
+  - In `가격 알림 설정…` (price alert settings) in the menu, enter the Naver API key and the check interval (default 60 minutes). The key is saved only in `~/.nuri-assistant/companion.json`.
+  - The character tells you when the price falls to the target price or below (or, if there is no target price, when the lowest price drops to a new low), and clicking the speech bubble opens the product page.
+  - In the `최저가 알림` (lowest price alerts) window in the menu you can add and delete items directly without the AI, and see the current price and the lowest price so far.
+- **To-dos**: if you say "보고서 금요일까지 해야 해" (I have to finish the report by Friday), it is added after a confirmation card. If you say "보고서 끝냈어" (I finished the report), a completion card appears.
+  - The character nags you at 7 PM the evening before the deadline and at 9 AM on the day. Overdue to-dos appear in the morning briefing.
+  - In the `할 일` (to-dos) window in the menu you can add items directly, click the circle to complete them, and see the D-day.
+- **Focus timer**: say "25분 집중 모드" (25-minute focus mode) or "50분 집중 10분 휴식 2번" (50 minutes focus, 10 minutes rest, twice), or press `집중 타이머 시작` (start focus timer) in the menu. A badge with the remaining time appears next to the character (click it to stop), and the character tells you each time a focus or rest period ends.
+- **Japanese voice**: the speech bubble is in Korean, and the voice is a Japanese anime voice.
+  - Install and run the free voice engine [VOICEVOX](https://voicevox.hiroshiba.jp/), then turn on `음성으로 말하기` (speak with voice) in `음성 설정…` (voice settings) in the menu. AivisSpeech, which works the same way, can also be used.
+  - For AI replies, the AI writes a Japanese line along with the reply (`<ja>…</ja>`, not shown in the speech bubble) and it is read as is. For lines the app makes itself (reminders, briefings, and so on), the local AI translates them into Japanese and reads them.
+  - Each character has a default voice that suits her (for example Akane = 四国めたん ツンツン), and you can change it and preview it in the voice settings.
+  - When using VOICEVOX character voices in public content, you must follow each character's terms of use, such as the 'VOICEVOX:character name' credit.
+- **Daily life notices** (menu `생활 알림 설정…`, life notice settings): at a set time (or when the app starts), a morning briefing with weather, umbrella, and clothing advice (if you enter a city, using a free weather service that needs no key), and in the evening a daily wrap-up of "focus sessions today, things finished, tomorrow's first event" (any time from `오늘 하루 정리` (today's wrap-up) in the menu). On Windows, she welcomes you back when you return after being away for more than 30 minutes, suggests a break when you have been sitting a long time, and says to drink water at the interval you set (she only looks at the time you last used the keyboard or mouse and does not read what you type, and she holds off during a focus timer).
+- **Closeness and memory notebook**: the more you talk and finish to-dos and focus sessions, the closer you become to the character (first meeting, friendly, close, best friends; menu `우리 사이` (our relationship)), and she says special lines when you reach a new stage. If you say something like "나 고양이 알레르기 있어" (I'm allergic to cats), she asks on a confirmation card whether she may remember it, and she brings up what you approved naturally in conversation (see and delete in the menu `기억 수첩` (memory notebook)).
+- **Copied text and download helper** (off by default): when you copy text that contains a date, a schedule card appears, and when you copy a shopping link, a price alert card appears (in the life notice settings). When unsorted files pile up in the Downloads folder, it shows a cleanup preview once a day (in the file renaming settings). Copied text is not saved, and for downloads only the file names are looked at.
+- **Fun**: "오늘 운세 봐줘" (tell my fortune today), "가위바위보 하자, 바위!" (let's play rock-paper-scissors, rock! The app decides the result and the character delivers it in her voice), and the menu `오늘의 운세` (today's fortune). She also congratulates you on your birthday (if you enter it in the life notice settings) and on days like 100 days or 1 year since you first met.
+- **Awareness and reactions**: if you leave her idle, she sometimes talks to herself (many, normal, few, or off in the life notice settings, with greetings, level-ups, and anniversaries switchable separately), and she reacts when you pet her head with the mouse or click many times. When a game or video is full screen, she does not come to the top and waits quietly. When you start it for the first time, she tells you what leaves your PC and what is not looked at (menu `개인정보 안내`, privacy notice).
+- **Faster voice and small pleasures**: she does not wait for the reply to finish and speaks the Japanese voice one sentence at a time right away. If you want, she tells you the time on the hour (in the life notice settings), and she says a few words on days like Lunar New Year, Chuseok, and Christmas, and on the first day of each season.
+- **Light mode and auto start**: on a slow PC, use `가벼운 모드` (light mode) in the AI settings (voice off, less motion, a smaller model suggested). With the menu `윈도우 시작할 때 켜기` (start when Windows starts), the assistant appears as soon as you turn on the PC (turning it off removes it cleanly).
+- **More convenient menus**: `집중 타이머…` (focus timer: time, break time, repeats, stop), `AI 설정…` (AI settings: model, Ollama address, how long the chat memory is), adding directly in the schedule window, and a price change graph in the lowest price window.
+- **File renaming**: if you say something like "다운로드 폴더 20260715 ja00 3페이지부터 이름 정리해줘" (rename the files in the Downloads folder starting from page 3 of 20260715 ja00), it shows a preview of renaming document and image files to the `20260715_ja00_003.pdf` pattern, and the names change only after you press `정리` (organize) on the confirmation card. Press `목록` (list) on the card to see all the files that will change (original name to new name, and files that collide) in a window, where you can organize or cancel right away. With "방금 거 되돌려줘" (undo the last one) you can restore the last renaming (also after confirmation). The folder can be Downloads, Desktop, Documents, Pictures, or a full path, up to 300 files at a time. In `파일 정리 설정…` (file renaming settings) in the menu you can set the name format (`{날짜}_{매체}_{페이지}`, `{연도}-{월}-{일}_{페이지}`, and so on, put together by clicking the boxes, with an example shown right away), the default media code to use when you do not say one, the file types to organize, and whether to skip files that are already organized and continue the numbering.
+- Development guides are in [CLAUDE.md](CLAUDE.md) (Korean), and the development log is in [HISTORY.md](HISTORY.md) (Korean).
 
-화면 배율이 125%나 150%라서 캐릭터가 흐리게 보이면 캐릭터를 오른쪽 클릭해 "선명하게 보기 (고배율 화면)"을 켜고 앱을 다시 실행합니다. 또렷해지는 대신 조금 작게 보입니다.
+### Running without Python (Windows exe)
 
-### Ollama 준비 (최초 1회)
+On the GitHub repository's Actions tab, open the most recent `tests` run, download `NuriAssistant-windows` from Artifacts, unzip it, and run `NuriAssistant.exe`. Python is included, so you do not need to install it separately. Prepare Ollama (and VOICEVOX if you want voice) separately as described below. Because this is an unsigned program, if Windows shows a warning on the first run, click "추가 정보" (More info) and then choose "실행" (Run anyway). To build it yourself, run `pip install pyinstaller pillow` and then `python tools/build_exe.py`.
 
-1. https://ollama.com 에서 Windows용 Ollama를 설치합니다. 설치하면 백그라운드에서 자동 실행됩니다.
-2. 터미널에서 모델을 받습니다. 기본 모델은 RTX 3060 Ti(8GB VRAM)에 맞춘 `qwen3:8b`입니다.
+If your display scaling is 125% or 150% and the character looks blurry, right-click the character, turn on "선명하게 보기 (고배율 화면)" (sharp view, high-scaling displays), and restart the app. It becomes clear but looks a little smaller.
+
+### Setting up Ollama (once, the first time)
+
+1. Install Ollama for Windows from https://ollama.com. After installing, it runs automatically in the background.
+2. Download the model in a terminal. The default model is `qwen3:8b`, chosen for the RTX 3060 Ti (8GB VRAM).
 
 ```powershell
 ollama pull qwen3:8b
 ```
 
-3. (권장) 캐릭터 이미지를 부드럽게 축소하도록 Pillow를 설치합니다. 없어도 실행됩니다.
+3. (Recommended) Install Pillow so character images are scaled down smoothly. It runs without it.
 
 ```powershell
 pip install pillow
 ```
 
-4. 앱을 실행합니다.
+4. Run the app.
 
 ```powershell
-python src/run_nuri.py           # 캐릭터 비서
-python src/run_nuri.py --classic # 캐릭터 없이 파일 정리 도구만
+python src/run_nuri.py           # character assistant
+python src/run_nuri.py --classic # file renaming tool only, without the character
 ```
 
-다른 모델을 쓰려면 메뉴의 `AI 모델 설정`에서 이름을 바꿉니다. 예를 들어 한국어에 강한 `exaone3.5:7.8b`도 8GB VRAM에 들어갑니다. 설정은 `~/.nuri-assistant/companion.json`에 저장됩니다.
+To use another model, change the name in `AI 모델 설정` (AI model settings) in the menu. For example, `exaone3.5:7.8b`, which is strong in Korean, also fits in 8GB VRAM. Settings are saved in `~/.nuri-assistant/companion.json`.
 
-## 파일 정리 도구 (이전 기능)
+## File renaming tool (earlier feature)
 
-캐릭터 비서 이전부터 있던 문서 파일명 일괄 정리 도구입니다. 메뉴의 `파일 정리 도구`나 `python src/run_nuri.py --classic`으로 엽니다.
+This is the document file name batch renaming tool that existed before the character assistant. Open it from `파일 정리 도구` (file renaming tool) in the menu or with `python src/run_nuri.py --classic`.
 
-파일을 추가하면 날짜, 매체코드, 페이지 번호를 기반으로 변경 예정 파일명을 미리 보여주고, 충돌 여부를 확인한 뒤 일괄 rename을 실행합니다. 변경 이력은 SQLite(`~/.nuri-assistant/history.sqlite3`)에 저장되며 마지막 배치는 되돌릴 수 있습니다.
+When you add files, it shows the planned new file names based on the date, media code, and page number, checks for conflicts, and then runs a batch rename. The change history is saved in SQLite (`~/.nuri-assistant/history.sqlite3`), and the last batch can be undone.
 
-메뉴의 `파일/구매 비서` 창에는 두 탭이 있습니다. 파일 비서는 "20260715 ja00 1부터 하위 폴더까지 정리해줘" 같은 문장에서 정리 조건을 뽑아 미리보기까지 보여 줍니다(실행은 확인 후). 구매 비서는 입력한 후보 상품을 가격·평점·리뷰 수·보증 기간으로 비교하고, OpenAI API 키(`OPENAI_API_KEY` 또는 창에 직접 입력, 파일에 저장하지 않음)가 있으면 웹 조사를 덧붙입니다. 이 부분은 영어 화면이며 로컬 AI가 아닌 외부 API를 씁니다.
+The `파일/구매 비서` (file/shopping assistant) window in the menu has two tabs. The file assistant picks out the organizing conditions from a sentence like "20260715 ja00 1부터 하위 폴더까지 정리해줘" (organize from 20260715 ja00 page 1, including subfolders) and shows a preview (it runs only after confirmation). The shopping assistant compares the candidate products you enter by price, rating, number of reviews, and warranty period, and adds web research if there is an OpenAI API key (`OPENAI_API_KEY` or typed into the window, not saved to a file). This part has an English screen and uses an external API, not the local AI.
 
-## 핵심 기능
+## Key features
 
-- PDF 및 일반 파일 다중 선택
-- 폴더 스캔 및 하위폴더 포함 스캔
-- `{DATE}_{MEDIA}_{PAGE}` 기반 파일명 규칙 생성
-- 실무용 파일명 규칙 프리셋
-- 작업 프로필 저장 및 불러오기
-- 날짜, 매체코드, 페이지 번호 자동 추론
-- 변경 예정 파일명 미리보기
-- 검색어 및 상태별 미리보기 필터
-- 목록에서 선택 항목 제거
-- 상태별 색상 표시
-- 미리보기 결과 CSV 저장
-- 대상 파일명 충돌 및 배치 내 중복 감지
-- SQLite 기반 rename 히스토리 저장
-- 마지막 작업 배치 전체 되돌리기
-- 외부 패키지 없이 실행 가능한 Tkinter GUI
+- Select multiple PDFs and ordinary files
+- Folder scan and scan including subfolders
+- Create file names based on `{DATE}_{MEDIA}_{PAGE}`
+- Presets of file name rules for real work
+- Save and load work profiles
+- Automatic inference of date, media code, and page number
+- Preview of planned file names
+- Preview filters by search term and status
+- Remove selected items from the list
+- Color display by status
+- Save the preview result as CSV
+- Detect target file name conflicts and duplicates within a batch
+- SQLite-based rename history
+- Undo the whole last batch
+- Tkinter GUI that runs without external packages
 
-## 파일명 규칙
+## File name rules
 
-기본 규칙은 다음과 같습니다.
+The default rule is as follows.
 
 ```text
 {DATE}_{MEDIA}_{PAGE}
 ```
 
-예시:
+Example:
 
 ```text
 20260628_ja00_001.pdf
 ```
 
-규칙 입력창에서 다음처럼 바꿀 수 있습니다.
+You can change it in the rule input box like this:
 
 ```text
 {MEDIA}-{DATE}-{PAGE}
 ```
 
-결과:
+Result:
 
 ```text
 ja00-20260628-001.pdf
 ```
 
-지원하는 토큰:
+Supported tokens:
 
 - `{DATE}`: `YYYYMMDD`
-- `{MEDIA}`: 영문 2자 + 숫자 2자, 예: `ja00`
-- `{PAGE}`: 3자리 페이지 번호, 예: `001`
+- `{MEDIA}`: 2 letters + 2 digits, for example `ja00`
+- `{PAGE}`: 3-digit page number, for example `001`
 
-## 실무 사용 흐름
+## Working flow
 
-1. `파일 추가` 또는 `폴더 불러오기`로 작업 대상을 추가합니다.
-2. 필요하면 `하위폴더 포함`을 켜고 폴더를 다시 불러옵니다.
-3. 날짜, 매체코드, 시작 페이지를 확인합니다.
-4. 프리셋 또는 직접 입력으로 파일명 규칙을 정합니다.
-5. 반복 작업이면 `작업 프로필`로 현재 설정을 저장합니다.
-6. `미리보기`에서 `ready`, `conflict`, `error` 상태를 검수합니다.
-7. 검색어 또는 상태 필터로 특정 파일과 문제 항목만 확인합니다.
-8. 제외할 파일은 선택 후 `선택 제거`를 누릅니다.
-9. 승인/공유가 필요하면 `CSV 저장`으로 변경 예정 목록을 남깁니다.
-10. 문제가 없으면 `변경 실행`을 누릅니다.
-11. 실수한 경우 `마지막 배치 취소`로 직전 작업 묶음을 되돌립니다.
+1. Add the targets with `파일 추가` (add files) or `폴더 불러오기` (load folder).
+2. If needed, turn on `하위폴더 포함` (include subfolders) and load the folder again.
+3. Check the date, media code, and start page.
+4. Decide the file name rule with a preset or by typing it.
+5. For repeated work, save the current settings with `작업 프로필` (work profile).
+6. In `미리보기` (preview), review the `ready`, `conflict`, and `error` states.
+7. Use the search term or status filter to check only specific files and problem items.
+8. For files to exclude, select them and press `선택 제거` (remove selected).
+9. If approval or sharing is needed, save the planned change list with `CSV 저장` (save CSV).
+10. If there are no problems, press `변경 실행` (run changes).
+11. If you made a mistake, undo the last group of work with `마지막 배치 취소` (cancel last batch).
 
-## 작업 프로필
+## Work profiles
 
-자주 쓰는 작업 조건은 프로필로 저장할 수 있습니다. 프로필에는 다음 설정이 포함됩니다.
+You can save frequently used work conditions as a profile. A profile includes these settings:
 
-- 날짜
-- 매체코드
-- 시작 페이지
-- 파일명 규칙
-- 하위폴더 포함 여부
+- Date
+- Media code
+- Start page
+- File name rule
+- Whether to include subfolders
 
-프로필 파일은 사용자 홈의 `.nuri-assistant/profiles.json`에 저장됩니다.
+Profile files are saved in `.nuri-assistant/profiles.json` in the user's home folder.
 
-## 개발
+## Development
 
-Python 3.10 이상(3.11 권장), 앱 실행에 외부 패키지는 필요 없습니다. 저장소 루트에서:
+Python 3.10 or later (3.11 recommended). The app needs no external packages to run. From the repository root:
 
 ```bash
-python src/run_nuri.py                    # 캐릭터 비서
-python src/run_nuri.py --classic          # 파일 정리 도구만
-python -m unittest discover -s tests      # 단위 테스트 (tkinter 없이 실행)
-pip install -e .                          # 선택: 설치하면 어디서나 nuri-assistant / python -m nuri_assistant 로 실행
+python src/run_nuri.py                    # character assistant
+python src/run_nuri.py --classic          # file renaming tool only
+python -m unittest discover -s tests      # unit tests (run without tkinter)
+pip install -e .                          # optional: after installing, run anywhere as nuri-assistant / python -m nuri_assistant
 ```
 
-설계 원칙과 작업 방식은 [CLAUDE.md](CLAUDE.md)에, 폴더 구조와 코드 관례는 [docs/RULES.md](docs/RULES.md)에, 남은 일은 [docs/TODO.md](docs/TODO.md)에, 지금까지의 작업 기록은 [HISTORY.md](HISTORY.md)에 있습니다.
+Design principles and ways of working are in [CLAUDE.md](CLAUDE.md), the folder structure and code conventions are in [docs/RULES.md](docs/RULES.md) (Korean), the remaining work is in [docs/TODO.md](docs/TODO.md) (Korean), and the log of work so far is in [HISTORY.md](HISTORY.md).

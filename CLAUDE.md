@@ -103,4 +103,6 @@ python tools/build_frames.py nuri|sera|yuki|akane|shizuku|hinata|sakura|reika [�
 
 ## 글쓰기
 
+깃허브에서 바로 보이는 글은 영어로 씁니다(사용자 지시): `README.md`(한국어판은 `README.ko.md`, 둘을 같이 고침), 커밋 메시지, `pyproject.toml` 설명, 워크플로·코드 주석. 작업 문서(CLAUDE.md, HISTORY.md, `docs/`)와 앱 화면 문구·대사는 한국어 그대로입니다.
+
 README·HISTORY·문서·커밋 메시지는 사람이 쓴 것처럼 평이하게 씁니다. 꾸밈 기호·이모지·항목마다 붙는 굵은 이름표·과장된 표현을 쓰지 않고, 사실과 숫자를 적습니다.
