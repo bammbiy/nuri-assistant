@@ -4,6 +4,8 @@ name: tests
 
 on:
   push:
+    branches: [main]  # 작업 브랜치와 main에 같은 커밋을 올리므로 main에서만 돌림
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
