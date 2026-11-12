@@ -74,6 +74,8 @@ class CompanionSettings:
     last_chime: str = ""
     light_mode: bool = False
     sharp_display: bool = False  # DPI aware on scaled screens: crisp but smaller (dpi.py), applies at next start
+    # Read-only calendar import (iCal addresses or .ics file paths, at most 3 used); the address is a secret.
+    calendar_urls: list = field(default_factory=list)
     x: int | None = None
     y: int | None = None
 
@@ -99,7 +101,13 @@ def load_settings(path: Path) -> CompanionSettings:
         _keep_backup(path)
         return CompanionSettings()
     known = {field.name for field in fields(CompanionSettings)}
-    return replace(CompanionSettings(), **{key: value for key, value in data.items() if key in known})
+    values = {key: value for key, value in data.items() if key in known}
+    if "calendar_urls" in values:
+        raw_urls = values["calendar_urls"]
+        if isinstance(raw_urls, str):
+            raw_urls = raw_urls.splitlines()
+        values["calendar_urls"] = [str(u).strip() for u in raw_urls if str(u).strip()] if isinstance(raw_urls, list) else []
+    return replace(CompanionSettings(), **values)
 
 
 def save_settings(path: Path, settings: CompanionSettings) -> None:

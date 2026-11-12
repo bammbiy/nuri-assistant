@@ -37,6 +37,7 @@ from ..windows.todo import TodoWindow
 from .art import CharacterArt
 from .chatbox import ChatBox, subject_particle
 from .confirm_card import HEIGHT as CARD_HEIGHT, ConfirmCard
+from .calendar_mixin import CalendarMixin
 from .menu_mixin import MenuMixin
 from .placeholder import draw_emote, draw_placeholder
 from .price_mixin import PriceMixin
@@ -44,7 +45,7 @@ from .routine_mixin import RoutineMixin
 from .speech_bubble import SpeechBubble
 from .timer_mixin import TimerMixin
 from .timing import (
-    BLINK_GAP_MS, BLINK_MS, BRIEFING_DELAY_MS, CANVAS_HEIGHT, CHAR_BOTTOM, CHAR_BOX, CHAR_TOP, CHATTER_POLL_MS,
+    BLINK_GAP_MS, BLINK_MS, BRIEFING_DELAY_MS, CALENDAR_FIRST_MS, CANVAS_HEIGHT, CHAR_BOTTOM, CHAR_BOX, CHAR_TOP, CHATTER_POLL_MS,
     CHAT_GAP, CLIPBOARD_GAP_S, CLIPBOARD_POLL_MS, DOWNLOADS_POLL_MS, EVENT_POLL_MS, FALLBACK_BG, FIRST_BLINK_MS,
     FIRST_PRICE_CHECK_MS, FIRST_REMINDER_CHECK_MS, FULL_EXTRA, GLANCE_GAP_S, KEEP_ON_TOP_MS, LIGHT_HISTORY,
     LIGHT_SLOWDOWN, MAX_FACTS, MOUTH_FLAP_MS, POINTER_POLL_MS, PRESENCE_POLL_MS, PRIVACY_DELAY_MS, RELAX_BASE_MS,
@@ -55,7 +56,7 @@ from .watch_mixin import WatchMixin
 from .window_mixin import WindowMixin
 
 
-class MascotApp(WindowMixin, RoutineMixin, WatchMixin, TimerMixin, VoiceMixin, PriceMixin, MenuMixin, tk.Tk):
+class MascotApp(WindowMixin, RoutineMixin, WatchMixin, TimerMixin, VoiceMixin, PriceMixin, CalendarMixin, MenuMixin, tk.Tk):
     """Desktop companion: an always-on-top character that chats through a local model."""
 
     def __init__(self, app_dir: Path = APP_DIR, with_windows: bool = False) -> None:
@@ -85,6 +86,8 @@ class MascotApp(WindowMixin, RoutineMixin, WatchMixin, TimerMixin, VoiceMixin, P
         self._voice_error_shown = False
         self._voice_playing = False
         self._price_checking = False
+        self._calendar_syncing = False
+        self._calendar_window = None
         self.pending_actions: list[ConfirmableAction] = []
         self._preview_window: RenamePreviewWindow | None = None
         self.art = CharacterArt(self, app_dir / USER_CHARACTERS.name, ASSETS_DIR, hard_edges=sys.platform == "win32")
@@ -139,6 +142,7 @@ class MascotApp(WindowMixin, RoutineMixin, WatchMixin, TimerMixin, VoiceMixin, P
         if not self.settings.privacy_shown:
             self.after(PRIVACY_DELAY_MS, self._first_privacy_notice)
         self.after(FIRST_PRICE_CHECK_MS, self._price_loop)
+        self.after(CALENDAR_FIRST_MS, self._calendar_loop)
         self.after(FIRST_BLINK_MS, self._blink)
         self.after(POINTER_POLL_MS, self._watch_pointer)
         self.after(KEEP_ON_TOP_MS, self._keep_on_screen)
@@ -270,6 +274,7 @@ class MascotApp(WindowMixin, RoutineMixin, WatchMixin, TimerMixin, VoiceMixin, P
         self.menu.add_command(label="준비 확인…", command=self.open_setup_check)
         self.menu.add_separator()
         self.menu.add_command(label="일정 보기", command=lambda: ScheduleWindow(self, self.schedule))
+        self.menu.add_command(label="캘린더 연결…", command=self.open_calendar_settings)
         self.menu.add_command(label="오늘 일정 브리핑", command=lambda: self.brief_today(force=True))
         self.menu.add_command(label="오늘 하루 정리", command=lambda: self.wrap_up(force=True))
         self.menu.add_command(label="할 일", command=lambda: TodoWindow(self, self.todos))
@@ -447,6 +452,7 @@ class MascotApp(WindowMixin, RoutineMixin, WatchMixin, TimerMixin, VoiceMixin, P
             "voice": self._on_voice,
             "voice_error": self._on_voice_error,
             "prices": self._show_price_results,
+            "calendar_done": self._on_calendar_done,
             "notice": self._on_notice,
             "briefing": self._on_briefing,
             "setup_needed": self._on_setup_needed,

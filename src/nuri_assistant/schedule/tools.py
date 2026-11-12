@@ -138,6 +138,8 @@ class ScheduleTools(ConfirmingTools[PendingAction]):
                 "candidates": [f"{e.when} {e.title}" for e in candidates[:10]],
             }
         event = candidates[0]
+        if event.imported:
+            return {"ok": False, "error": "캘린더에서 가져온 일정이라 캘린더 앱에서 지워야 해요.", "title": event.title}
         action = PendingAction("cancel", event.title, event.start, event.all_day, event.remind_at, event.id)
         self.pending.append(action)
         return {"ok": True, "status": "사용자 확인 대기 중 (아직 취소되지 않음)", "title": event.title, "when": event.when}

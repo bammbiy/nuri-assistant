@@ -31,7 +31,7 @@ python src/run_nuri.py --autostart  # 윈도우 시작 때 쓰는 실행(비서 
 python -m nuri_assistant [--classic]   # 같은 실행 (src/ 안에서, 또는 pip install -e . 뒤 어디서나. 설치하면 nuri-assistant 명령도 생김)
 pip install -e .[dev]             # 선택: 개발용 설치(pyflakes). 그림이 assets/에 있어서 편집 설치(-e)만 지원
 python -m unittest discover -s tests                         # 저장소 루트에서 (테스트는 src.nuri_assistant 로 import)
-python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 256개, tkinter·화면이 없으면 UI 스모크 3개는 건너뜀)
+python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 294개, tkinter·화면이 없으면 UI 스모크 3개는 건너뜀)
 python -m pyflakes src tests tools
 python tools/build_exe.py         # Windows 실행 파일 묶음(dist/NuriAssistant/, pyinstaller 필요). 빌드 뒤 --selfcheck로 켜지는지 확인
 pip install -r tools/requirements-frames.txt                 # 프레임 생성 도구용 (앱에는 필요 없음)
@@ -49,7 +49,7 @@ python tools/build_frames.py nuri|sera|yuki|akane|shizuku|hinata|sakura|reika [�
 ## 구조 (요약, 상세는 docs/RULES.md "구조")
 
 - `src/run_nuri.py` 진입점, `src/nuri_assistant/app.py`의 `main()`
-- `src/nuri_assistant/`: `companion/`(페르소나·Ollama·대화 루프·도구 라우팅·친밀도), `schedule/` `todo/` `focus/` `memo/` `pricewatch/` `weather/` `fun/` `pcwatch/` `presence/` `voice/`(영역별 저장소·도구·순수 로직), `classic/`(파일 이름 정리 도구), `announcements.py`(AI를 거치지 않는 대사), `services.py`(조립), `paths.py`(모든 경로), `db.py`, `routine.py`, `autostart.py`, `screen.py`
+- `src/nuri_assistant/`: `companion/`(페르소나·Ollama·대화 루프·도구 라우팅·친밀도), `schedule/`(일정·날짜 해석·캘린더 읽기) `todo/` `focus/` `memo/` `pricewatch/` `weather/` `fun/` `pcwatch/` `presence/` `voice/`(영역별 저장소·도구·순수 로직), `classic/`(파일 이름 정리 도구), `announcements.py`(AI를 거치지 않는 대사), `services.py`(조립), `paths.py`(모든 경로), `db.py`, `routine.py`, `autostart.py`, `screen.py`
 - `ui/`: `character/`(캐릭터 창 `mascot.py`가 앱의 중심, 기능별 메서드는 `*_mixin.py`, 시간 상수는 `timing.py`), `windows/`(메뉴에서 여는 창), `classic/`, `theme.py`. 단위 테스트는 `ui/`를 import하지 않음
 - `tests/test_<영역>.py`, `tools/build_frames.py`(캐릭터 프레임), `assets/characters/<id>/`, `reports/`
 - 사용자 데이터는 `~/.nuri-assistant/`(설정 `companion.json`, `*.sqlite3`, `error.log`, 개인 캐릭터 그림)

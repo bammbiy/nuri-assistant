@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import tempfile
 import unittest
 from datetime import datetime, timedelta
@@ -8,7 +9,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.nuri_assistant.companion import Companion, ConversationStore, OllamaClient, OllamaToolsUnsupported, ToolCall, get_persona
-from src.nuri_assistant.schedule import ScheduleStore, ScheduleTools, WhenError, default_remind_at, parse_range, parse_when
+from src.nuri_assistant.companion import load_settings
+from src.nuri_assistant.schedule import CalendarError, ScheduleStore, ScheduleTools, WhenError, default_remind_at, parse_range, parse_when, sync_calendars
+from src.nuri_assistant.schedule.calsync import read_source
+from src.nuri_assistant.schedule.ical import CalendarEvent
 
 # Tuesday afternoon
 NOW = datetime(2026, 10, 6, 14, 30)
@@ -229,6 +233,122 @@ class OllamaToolCallTest(unittest.TestCase):
         payload = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
         self.assertEqual(payload["tools"], [{"type": "function"}])
         self.assertEqual(items, [ToolCall("list_events", {"range": "오늘"}), ToolCall("add_event", {"title": "회의", "when": "내일"})])
+
+
+def _ev(uid: str, title: str, start: datetime, all_day: bool = False) -> CalendarEvent:
+    return CalendarEvent(uid=uid, title=title, start=start, all_day=all_day)
+
+
+class ImportedEventsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / "x.sqlite3"
+        self.store = ScheduleStore(self.path)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def window(self):
+        return NOW - timedelta(days=1), NOW + timedelta(days=90)
+
+    def test_old_schema_is_migrated(self) -> None:
+        old = Path(self.tmp.name) / "old.sqlite3"
+        conn = sqlite3.connect(old)
+        conn.execute("CREATE TABLE schedule_events (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, "
+                     "start TEXT NOT NULL, all_day INTEGER NOT NULL DEFAULT 0, remind_at TEXT, "
+                     "reminded INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)")
+        conn.execute("INSERT INTO schedule_events (title, start, created_at) VALUES ('옛 일정', '2026-10-07T10:00', 'x')")
+        conn.commit()
+        conn.close()
+        store = ScheduleStore(old)
+        store.add("새 일정", datetime(2026, 10, 8, 9, 0), False, None)
+        events = store.between(datetime(2026, 10, 7), datetime(2026, 10, 9))
+        self.assertEqual([e.title for e in events], ["옛 일정", "새 일정"])
+        self.assertFalse(any(e.imported for e in events))
+        ScheduleStore(old)  # opening twice is fine
+
+    def test_sync_imported_insert_update_delete_and_keep_reminded(self) -> None:
+        mine = self.store.add("내 일정", datetime(2026, 10, 7, 9, 0), False, None)
+        start = datetime(2026, 10, 7, 15, 0)
+        count = self.store.sync_imported("ical", [_ev("a", "회의", start), _ev("b", "점심", datetime(2026, 10, 8, 12, 0))], NOW)
+        self.assertEqual(count, 2)
+        first = next(e for e in self.store.between(start, start + timedelta(hours=1)) if e.imported)
+        self.assertEqual(first.remind_at, start - timedelta(minutes=10))
+        self.store.mark_reminded(first.id)
+        count = self.store.sync_imported("ical", [_ev("a", "회의 (변경)", start)], NOW)
+        self.assertEqual(count, 1)
+        updated = self.store.get(first.id)
+        self.assertEqual((updated.title, updated.reminded, updated.remind_at), ("회의 (변경)", True, first.remind_at))
+        self.assertTrue(updated.imported)
+        self.assertEqual(self.store.get(mine.id).title, "내 일정")
+        self.assertEqual(len(self.store.between(datetime(2026, 10, 7), datetime(2026, 10, 9))), 2)
+
+    def test_delete_refuses_imported_and_clear_imported(self) -> None:
+        mine = self.store.add("내 일정", datetime(2026, 10, 7, 9, 0), False, None)
+        self.store.sync_imported("ical", [_ev("a", "회의", datetime(2026, 10, 7, 15, 0))], NOW)
+        imported = next(e for e in self.store.between(datetime(2026, 10, 7), datetime(2026, 10, 8)) if e.imported)
+        self.assertFalse(self.store.delete(imported.id))
+        self.assertIsNotNone(self.store.get(imported.id))
+        self.store.clear_imported("ical")
+        self.assertIsNone(self.store.get(imported.id))
+        self.assertIsNotNone(self.store.get(mine.id))
+        self.assertTrue(self.store.delete(mine.id))
+
+    def test_cancel_tool_does_not_queue_imported_event(self) -> None:
+        self.store.sync_imported("ical", [_ev("a", "치과 예약", datetime(2026, 10, 7, 15, 0))], NOW)
+        tools = ScheduleTools(self.store, clock=lambda: NOW)
+        result = tools.execute("cancel_event", {"keyword": "치과"})
+        self.assertFalse(result["ok"])
+        self.assertIn("캘린더", result["error"])
+        self.assertEqual(tools.pending, [])
+
+    def test_sync_calendars_flow(self) -> None:
+        a, b = datetime(2026, 10, 7, 15, 0), datetime(2026, 10, 8, 9, 0)
+        texts = {"one": "1", "two": "2"}
+        events = {"1": [_ev("a", "회의", a)], "2": [_ev("a", "회의", a), _ev("b", "병원", b)]}
+        parse = lambda text, start, end, tz=None: events[text]  # noqa: E731
+        count = sync_calendars(self.store, [" one ", "", "two"], NOW, read=texts.__getitem__, parse=parse)
+        self.assertEqual(count, 2)
+
+        def failing(location: str) -> str:
+            if location == "two":
+                raise CalendarError("실패")
+            return "1"
+
+        with self.assertRaises(CalendarError):
+            sync_calendars(self.store, ["one", "two"], NOW, read=failing, parse=parse)
+        self.assertEqual(len(self.store.between(datetime(2026, 10, 7), datetime(2026, 10, 9))), 2)
+        self.assertEqual(sync_calendars(self.store, ["  ", ""], NOW, read=failing, parse=parse), 0)
+        self.assertEqual(self.store.between(datetime(2026, 10, 7), datetime(2026, 10, 9)), [])
+
+    def test_read_source_webcal_and_file(self) -> None:
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self, limit=-1):
+                return "\ufeffBEGIN:VCALENDAR".encode("utf-8")
+
+        with patch("src.nuri_assistant.schedule.calsync.urllib.request.urlopen", return_value=Response()) as urlopen:
+            text = read_source("webcal://example.com/a.ics")
+        self.assertEqual(text, "BEGIN:VCALENDAR")
+        self.assertEqual(urlopen.call_args.args[0].full_url, "https://example.com/a.ics")
+        path = Path(self.tmp.name) / "a.ics"
+        path.write_bytes("\ufeff제목".encode("utf-8"))
+        self.assertEqual(read_source(str(path)), "제목")
+        with self.assertRaises(CalendarError):
+            read_source(str(Path(self.tmp.name) / "none.ics"))
+
+    def test_calendar_urls_setting_accepts_string(self) -> None:
+        path = Path(self.tmp.name) / "companion.json"
+        path.write_text(json.dumps({"calendar_urls": "a.ics\n\n b.ics "}), encoding="utf-8")
+        self.assertEqual(load_settings(path).calendar_urls, ["a.ics", "b.ics"])
+        path.write_text(json.dumps({"calendar_urls": ["x"]}), encoding="utf-8")
+        self.assertEqual(load_settings(path).calendar_urls, ["x"])
+        self.assertEqual(load_settings(Path(self.tmp.name) / "none.json").calendar_urls, [])
 
 
 if __name__ == "__main__":

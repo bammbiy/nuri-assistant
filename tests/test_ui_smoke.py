@@ -36,7 +36,7 @@ def _display_available() -> bool:
 # Menu entries that open a window (or change the view) without asking a question.
 # Left out on purpose: "내 이름 설정" and "이 캐릭터의 기억 지우기" (modal dialogs), "종료".
 MENU_WINDOWS = [
-    "AI 설정…", "준비 확인…", "일정 보기", "할 일", "집중 타이머…", "최저가 알림", "가격 알림 설정…", "음성 설정…",
+    "AI 설정…", "준비 확인…", "일정 보기", "캘린더 연결…", "할 일", "집중 타이머…", "최저가 알림", "가격 알림 설정…", "음성 설정…",
     "생활 알림 설정…", "대화 기록 보기", "기억 수첩", "개인정보 안내", "파일 정리 도구", "파일 정리 설정…",
     "파일/구매 비서", "비서 선택…",
 ]

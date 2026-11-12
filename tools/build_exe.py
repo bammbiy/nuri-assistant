@@ -1,6 +1,6 @@
 """Build the Windows program folder with PyInstaller and check that it starts.
 
-    pip install pyinstaller pillow
+    pip install pyinstaller pillow tzdata
     python tools/build_exe.py
 
 Result: dist/NuriAssistant/NuriAssistant.exe (with its _internal folder) and
@@ -11,6 +11,7 @@ start (slow) and trips antivirus false alarms more often.
 """
 from __future__ import annotations
 
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -34,8 +35,10 @@ def main() -> None:
         stream.reconfigure(encoding="utf-8", errors="replace")
     stage = stage_assets()
     shutil.rmtree(DIST / NAME, ignore_errors=True)
+    # Windows has no time zone database; with tzdata bundled, calendar events from other zones convert correctly.
+    zones = ["--collect-data", "tzdata"] if importlib.util.find_spec("tzdata") else []
     subprocess.run([
-        sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--windowed", "--name", NAME,
+        sys.executable, "-m", "PyInstaller", *zones, "--noconfirm", "--clean", "--windowed", "--name", NAME,
         "--paths", str(ROOT / "src"), "--add-data", f"{stage}{';' if sys.platform == 'win32' else ':'}assets",
         "--distpath", str(DIST), "--workpath", str(BUILD / "pyinstaller"), "--specpath", str(BUILD),
         str(ROOT / "src" / "run_nuri.py"),

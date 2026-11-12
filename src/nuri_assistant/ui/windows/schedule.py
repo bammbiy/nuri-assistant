@@ -170,7 +170,10 @@ class ScheduleWindow(CardListMixin, tk.Toplevel):
                            font=title_font, fill=title_color)
         canvas.create_text(x1 + 84, y + 40, text=_remind_text(event, past), anchor="w", font=(FONT, 9), fill=SUBTLE)
 
-        self._delete_button(event.id, x2 - 22, y + CARD_H // 2)
+        if event.imported:  # read-only: removed in the calendar app, so no delete button
+            canvas.create_text(x2 - 14, y + CARD_H // 2, text="캘린더", anchor="e", font=(FONT, 8), fill=SUBTLE)
+        else:
+            self._delete_button(event.id, x2 - 22, y + CARD_H // 2)
         return y2 + 8
 
 

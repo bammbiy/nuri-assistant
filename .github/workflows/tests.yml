@@ -58,7 +58,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install build tools
-        run: python -m pip install pyinstaller pillow
+        run: python -m pip install pyinstaller pillow tzdata
       - name: Build and self-check
         run: python tools/build_exe.py
       - name: Show error.log on failure

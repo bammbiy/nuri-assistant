@@ -5,9 +5,13 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ..db import connect
 from .timeparse import format_when
+
+if TYPE_CHECKING:
+    from .ical import CalendarEvent
 
 
 DEFAULT_REMIND_MINUTES = 10
@@ -22,6 +26,11 @@ class Event:
     all_day: bool
     remind_at: datetime | None
     reminded: bool
+    source: str = ""  # "" = made in the app, otherwise the import source (e.g. "ical")
+
+    @property
+    def imported(self) -> bool:
+        return self.source != ""
 
     @property
     def when(self) -> str:
@@ -58,6 +67,11 @@ class ScheduleStore:
                 )
                 """
             )
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(schedule_events)")}
+            if "source" not in columns:
+                conn.execute("ALTER TABLE schedule_events ADD COLUMN source TEXT NOT NULL DEFAULT ''")
+            if "external_id" not in columns:
+                conn.execute("ALTER TABLE schedule_events ADD COLUMN external_id TEXT")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_schedule_start ON schedule_events (start)")
 
     def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
@@ -72,6 +86,7 @@ class ScheduleStore:
             all_day=bool(row["all_day"]),
             remind_at=datetime.fromisoformat(row["remind_at"]) if row["remind_at"] else None,
             reminded=bool(row["reminded"]),
+            source=row["source"] or "",
         )
 
     def add(self, title: str, start: datetime, all_day: bool, remind_at: datetime | None) -> Event:
@@ -91,8 +106,40 @@ class ScheduleStore:
         return self._event(row) if row else None
 
     def delete(self, event_id: int) -> bool:
+        """Delete an app-made event. Imported events are refused (the next sync would bring them back)."""
+
         with self._connect() as conn:
-            return conn.execute("DELETE FROM schedule_events WHERE id = ?", (event_id,)).rowcount > 0
+            return conn.execute("DELETE FROM schedule_events WHERE id = ? AND source = ''", (event_id,)).rowcount > 0
+
+    def sync_imported(self, source: str, events: list[CalendarEvent], now: datetime) -> int:
+        """Make the rows of `source` match `events` in one transaction; returns the resulting row count."""
+
+        wanted = {f"{e.uid}|{e.start.isoformat()}": e for e in events}
+        with self._connect() as conn:
+            existing = {
+                row["external_id"]: row["id"]
+                for row in conn.execute("SELECT id, external_id FROM schedule_events WHERE source = ?", (source,))
+            }
+            for external_id, row_id in existing.items():
+                if external_id not in wanted:
+                    conn.execute("DELETE FROM schedule_events WHERE id = ?", (row_id,))
+            for external_id, event in wanted.items():
+                if external_id in existing:
+                    conn.execute("UPDATE schedule_events SET title = ? WHERE id = ?", (event.title, existing[external_id]))
+                    continue
+                remind_at = default_remind_at(event.start, event.all_day, now)
+                conn.execute(
+                    "INSERT INTO schedule_events (title, start, all_day, remind_at, created_at, source, external_id)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (event.title, event.start.isoformat(timespec="minutes"), int(event.all_day),
+                     remind_at.isoformat(timespec="minutes") if remind_at else None,
+                     now.isoformat(timespec="seconds"), source, external_id),
+                )
+            return conn.execute("SELECT COUNT(*) FROM schedule_events WHERE source = ?", (source,)).fetchone()[0]
+
+    def clear_imported(self, source: str) -> int:
+        with self._connect() as conn:
+            return conn.execute("DELETE FROM schedule_events WHERE source = ?", (source,)).rowcount
 
     def between(self, start: datetime, end: datetime) -> list[Event]:
         """Events starting in [start, end); all-day events count for their whole day."""

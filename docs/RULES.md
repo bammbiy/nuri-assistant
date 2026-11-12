@@ -13,7 +13,7 @@ src/nuri_assistant/
 │                brain(모델→도구→모델 루프 최대 4회, 대화 기억, 일본어 번역, 음성 문장 콜백 on_voice), reply(표정 태그·<think>·<ja> 처리, take_voice로 일본어 문장 단위),
 │                memory(캐릭터별 대화), settings(companion.json), affection(캐릭터별 친밀도: 처음·친근·가까움·단짝, 하루 상한),
 │                toolbox(도구 묶음 라우팅, ConfirmingTools 기반 클래스, "응"/"아니" 판정 parse_confirmation)
-├── schedule/    timeparse(한국어 날짜 해석), store, tools(add/list/cancel_event)
+├── schedule/    timeparse(한국어 날짜 해석), store, tools(add/list/cancel_event), ical(.ics 해석)·calsync(캘린더 읽어 오기)
 ├── todo/        store(마감·잔소리 시점), tools(add/list/complete/delete_todo)
 ├── focus/       timer(집중·휴식 단계), tools(start/stop/status) — 확인 카드 없이 바로 실행, log(끝난 집중 블록 기록, 하루 정리용)
 ├── presence/    idle(Windows 마지막 입력 시각만), tracker(돌아옴 인사·쉬는 시간·물 알림 시점, 순수 로직),
@@ -95,6 +95,7 @@ docs/                          RULES.md(이 문서), TODO.md(남은 일)
 - 첫 실행 개인정보 안내: `privacy_shown`이 거짓이면 비서를 고른 뒤 2.5초에 `PrivacyWindow`, 닫으면 참. 메뉴에서 다시 열 수 있음. 밖으로 나가는 것을 새로 추가하면 이 창 문구도 고칩니다.
 - 정각 알림(`hourly_chime`, 기본 꺼짐): 8~23시 정각부터 3분 안(`CHIME_WINDOW_MIN`)에 `_routine_step`이 한 번(`last_chime` = "YYYY-MM-DDTHH"), 브리핑·하루 정리·기념일 뒤 1분이 지나야. 바쁘거나 전체 화면·집중 타이머 중이면 그 시각은 건너뜀. 명절·계절 첫날은 기념일과 같은 자리(`last_occasion`, `notify_occasion`)에서 생일·N일이 없는 날에만. 설날·추석은 `fun/seasons.py` 표가 2030년까지라 그 뒤는 표를 늘려야 함.
 - 가벼운 모드(`light_mode`, AI 설정): 음성 끔(`_voice_on()`이 거짓, 시스템 프롬프트에도 `<ja>` 요청 안 함), 깜박임 간격 2배(`LIGHT_SLOWDOWN`), 대기 표정 바꾸기 없음, 모델에 보내는 지난 대화 최대 10개(`LIGHT_HISTORY`). `num_ctx`는 줄이지 않음(시스템 프롬프트+도구 설명이 2048을 넘어 앞이 잘림). 작은 모델(`qwen3:4b`)은 권유만 하고 자동으로 바꾸지 않음.
+- 캘린더 연결(`schedule/ical.py` 해석기, `schedule/calsync.py`, 창 `ui/windows/calendar_settings.py`, `ui/character/calendar_mixin.py`, 설정 `calendar_urls` 최대 3개, 기본 비어 있음): iCal 주소(http·https·webcal)나 `.ics` 파일을 켤 때 5초 뒤와 30분마다 읽어 오늘-1일부터 90일치를 `schedule_events`에 `source="ical"`로 넣습니다(읽기 전용, 캘린더는 고치지 않음). 가져온 일정은 알림·브리핑·일정 창에 그대로 섞이고, 앱에서 지울 수 없습니다(`delete`가 거부, 취소 도구도 안내만, 일정 창에는 "캘린더" 표시). 다시 읽을 때 `external_id`(uid|시작)로 맞춰 알림 여부를 유지하고, 읽기 실패면 기존 것을 그대로 둡니다(주기 동기화 실패는 조용히 넘어감). 해석기는 외부 패키지 없이 반복(DAILY·WEEKLY·MONTHLY·YEARLY, INTERVAL·COUNT·UNTIL·BYDAY·BYMONTHDAY), EXDATE, RECURRENCE-ID, 종일·UTC·TZID를 다루고, 모르는 규칙은 첫 발생만 냅니다. 기간(DTEND)은 읽지 않아 여러 날 일정은 시작일만. Windows에는 시간대 데이터가 없어 TZID를 못 바꾸면 그 시각을 로컬로 봅니다(exe에는 `tzdata`를 같이 묶음).
 - 준비 확인(`companion/setup_check.py`, 창 `ui/windows/setup_check.py`, 메뉴 "준비 확인…"): Ollama 실행·모델 설치·음성(켰을 때만, 선택 단계)을 단계로 보여 주고, 모델이 없으면 "모델 받기"가 Ollama의 `/api/pull`로 받습니다(`OllamaClient.pull`, 진행률 표시). 앱을 켰을 때 준비가 안 돼 있으면 말풍선과 함께 창이 자동으로 뜹니다. 비서 선택 중이면 선택 뒤로 미루고(`_setup_held`), 윈도우 시작과 함께 켜졌으면(`--autostart`) 말풍선만. 설정 저장 뒤의 확인에서는 창을 열지 않습니다.
 - 선명하게 보기(`dpi.py`, 메뉴 체크 `sharp_display`, 기본 꺼짐): 켜면 `app.main()`이 첫 창을 만들기 전에 `SetProcessDpiAwareness(1)`을 부르고, `theme.apply_default_fonts`가 Tk 배율을 96dpi로 고정합니다(글꼴이 픽셀 레이아웃과 어긋나지 않게). 125%·150% 화면에서 Windows가 창을 늘리지 않아 또렷하지만 그만큼 작게 보입니다. 다음 실행부터 적용. 그림과 레이아웃을 배율만큼 키우는 방식은 모든 창의 픽셀 좌표를 바꿔야 해서 하지 않았습니다.
 - exe 묶음(`tools/build_exe.py`, PyInstaller 폴더 방식): `paths.FROZEN`이면 그림·글꼴은 `sys._MEIPASS/assets`에서 찾고, 시작 프로그램 등록은 exe 자신(`"…\NuriAssistant.exe" --autostart`). 원본 시트(`reference_*`)는 묶지 않습니다. `--selfcheck`는 임시 폴더로 캐릭터 창을 띄웠다 닫고 종료 코드 0/1(안내창 없음)이라 빌드 확인에만 씁니다. 새 데이터 폴더를 `assets/` 밖에 만들면 빌드 스크립트에도 넣어야 합니다.
