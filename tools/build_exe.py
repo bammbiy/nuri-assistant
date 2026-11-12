@@ -30,6 +30,8 @@ def stage_assets() -> Path:
 
 
 def main() -> None:
+    for stream in (sys.stdout, sys.stderr):  # CI consoles are not Korean code pages
+        stream.reconfigure(encoding="utf-8", errors="replace")
     stage = stage_assets()
     shutil.rmtree(DIST / NAME, ignore_errors=True)
     subprocess.run([
