@@ -8,15 +8,18 @@ from __future__ import annotations
 import random
 import sys
 import threading
+import tkinter as tk
 from datetime import datetime
 from tkinter import messagebox, simpledialog
 
-from ...companion import PERSONAS, OllamaClient
+from ...companion import PERSONAS, OllamaClient, check_setup
+from ...voice import VoicevoxClient
 from ..windows.ai_settings import AISettingsWindow
 from ..windows.conversation_log import ConversationLogWindow
 from ..windows.focus_dialog import FocusDialog
 from ..windows.price_settings import PriceSettingsWindow
 from ..windows.routine_settings import RoutineSettingsWindow
+from ..windows.setup_check import SetupCheckWindow
 from .picker import CharacterPicker
 from .timing import BRIEFING_DELAY_MS, HELD_NOTICE_DELAY_MS, HELD_NOTICE_GAP_MS
 
@@ -30,6 +33,26 @@ class MenuMixin:
             threading.Thread(target=self._check_model, daemon=True).start()
 
         AISettingsWindow(self, self.settings, lambda: OllamaClient(self.settings.ollama_url).list_models(), save)
+
+    def open_setup_check(self) -> None:
+        window = getattr(self, "_setup_check_window", None)
+        try:
+            if window is not None and window.winfo_exists():
+                window.deiconify()
+                window.lift()
+                return
+        except tk.TclError:
+            pass
+
+        def voice_ok() -> bool:
+            VoicevoxClient(self.settings.voice_url).voices()  # lightest existing call; raises when the engine is down
+            return True
+
+        def run_check():
+            return check_setup(self.settings, OllamaClient(self.settings.ollama_url, timeout=5), voice_ok)
+
+        self._setup_check_window = SetupCheckWindow(
+            self, run_check, lambda: OllamaClient(self.settings.ollama_url).pull(self.settings.model), self.settings.model)
 
     def open_focus_dialog(self) -> None:
         running = self.focus_timer.state(datetime.now()).phase is not None
@@ -72,6 +95,9 @@ class MenuMixin:
                 for index, (message, expression) in enumerate(self._held_notices):
                     self.after(HELD_NOTICE_DELAY_MS + index * HELD_NOTICE_GAP_MS, lambda m=message, e=expression: self.say(m, e))
                 self._held_notices.clear()
+                if self._setup_held:
+                    self._setup_held = False
+                    self.after(HELD_NOTICE_DELAY_MS, self.open_setup_check)
 
         try:
             CharacterPicker(self, PERSONAS.values(), self.persona.id, thumbnail, picked, remember=not self.settings.pick_on_start)

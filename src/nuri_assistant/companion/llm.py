@@ -37,6 +37,21 @@ class OllamaClient:
         data = json.loads(self._open("GET", "/api/tags").read().decode("utf-8"))
         return sorted(str(model.get("name", "")) for model in data.get("models", []) if model.get("name"))
 
+    def pull(self, model: str) -> Iterator[tuple[str, int | None]]:
+        """Download a model; yield (status, percent) per progress line (percent is None without a total)."""
+
+        response = self._open("POST", "/api/pull", {"model": model, "stream": True})
+        with response:
+            for line in response:
+                if not line.strip():
+                    continue
+                event = json.loads(line.decode("utf-8"))
+                if event.get("error"):
+                    raise OllamaError(str(event["error"]))
+                total, completed = event.get("total") or 0, event.get("completed") or 0
+                percent = min(100, completed * 100 // total) if total > 0 else None
+                yield str(event.get("status", "")), percent
+
     def chat_stream(
         self,
         model: str,

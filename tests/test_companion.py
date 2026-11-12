@@ -18,8 +18,12 @@ from src.nuri_assistant.companion import (
     OllamaClient,
     OllamaError,
     ReplyParser,
+    Step,
+    check_setup,
     get_persona,
+    has_model,
     load_settings,
+    ready,
     save_settings,
 )
 
@@ -137,6 +141,73 @@ class OllamaClientTest(unittest.TestCase):
         with patch("src.nuri_assistant.companion.llm.urlopen", side_effect=URLError("refused")):
             with self.assertRaisesRegex(OllamaError, "Ollama"):
                 OllamaClient().list_models()
+
+
+class OllamaPullTest(unittest.TestCase):
+    def test_pull_yields_status_and_percent(self) -> None:
+        events = [{"status": "pulling manifest"}, {"status": "pulling abc", "total": 200, "completed": 84},
+                  {"status": "success"}]
+        with patch("src.nuri_assistant.companion.llm.urlopen", return_value=FakeStreamResponse(events)) as urlopen:
+            seen = list(OllamaClient().pull("qwen3:8b"))
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, "http://127.0.0.1:11434/api/pull")
+        self.assertEqual(json.loads(request.data.decode("utf-8")), {"model": "qwen3:8b", "stream": True})
+        self.assertEqual(seen, [("pulling manifest", None), ("pulling abc", 42), ("success", None)])
+
+    def test_pull_error_line_raises(self) -> None:
+        with patch("src.nuri_assistant.companion.llm.urlopen", return_value=FakeStreamResponse([{"error": "pull model manifest: file does not exist"}])):
+            with self.assertRaises(OllamaError):
+                list(OllamaClient().pull("nope"))
+
+
+class SetupCheckTest(unittest.TestCase):
+    class Client:
+        def __init__(self, models: list[str] | None) -> None:
+            self.models = models
+
+        def list_models(self) -> list[str]:
+            if self.models is None:
+                raise OllamaError("down")
+            return self.models
+
+    def test_has_model_matches_latest_suffix(self) -> None:
+        self.assertTrue(has_model(["qwen3:8b"], "qwen3:8b"))
+        self.assertTrue(has_model(["llama3:latest"], "llama3"))
+        self.assertFalse(has_model(["qwen3:4b"], "qwen3:8b"))
+
+    def test_ollama_down(self) -> None:
+        steps = check_setup(CompanionSettings(), self.Client(None))
+        self.assertEqual([(s.key, s.ok) for s in steps], [("ollama", False), ("model", False)])
+        self.assertFalse(ready(steps))
+
+    def test_model_missing_and_all_ok(self) -> None:
+        settings = CompanionSettings()
+        missing = check_setup(settings, self.Client(["other:1b"]))
+        self.assertEqual([(s.key, s.ok) for s in missing], [("ollama", True), ("model", False)])
+        self.assertFalse(ready(missing))
+        good = check_setup(settings, self.Client([settings.model]))
+        self.assertTrue(ready(good))
+
+    def test_voice_step_is_optional_and_only_when_enabled(self) -> None:
+        settings = CompanionSettings(voice_enabled=True)
+        client = self.Client([settings.model])
+        failed = check_setup(settings, client, lambda: False)
+        self.assertEqual(failed[-1].key, "voice")
+        self.assertTrue(failed[-1].optional and not failed[-1].ok)
+        self.assertTrue(ready(failed))
+
+        def boom() -> bool:
+            raise RuntimeError("x")
+
+        self.assertFalse(check_setup(settings, client, boom)[-1].ok)
+        self.assertEqual(len(check_setup(settings, client, None)), 2)
+        off = CompanionSettings(voice_enabled=False)
+        self.assertEqual([s.key for s in check_setup(off, self.Client([off.model]), lambda: True)], ["ollama", "model"])
+
+    def test_ready_ignores_optional(self) -> None:
+        self.assertTrue(ready([Step("a", True, "t", "d"), Step("b", False, "t", "d", optional=True)]))
+        self.assertFalse(ready([Step("a", False, "t", "d")]))
 
 
 class FakeClient:

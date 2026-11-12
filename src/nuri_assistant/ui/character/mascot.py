@@ -14,8 +14,8 @@ from pathlib import Path
 from ... import autostart
 from ...classic.tools import RenameAction
 from ...companion import (
-    EXPRESSIONS, Companion, ConfirmableAction, OllamaClient, get_persona, load_settings, parse_confirmation,
-    save_settings,
+    EXPRESSIONS, Companion, ConfirmableAction, OllamaClient, get_persona, has_model, load_settings,
+    parse_confirmation, save_settings,
 )
 from ...crashlog import log_exception
 from ...paths import APP_DIR, ASSETS_DIR, SETTINGS_PATH, USER_CHARACTERS
@@ -79,6 +79,8 @@ class MascotApp(WindowMixin, RoutineMixin, WatchMixin, TimerMixin, VoiceMixin, P
         )
         self._ja_cache: dict[str, str] = {}
         self._held_notices: list[tuple[str, str]] = []
+        self._setup_held = False  # setup window wanted while the picker is still open
+        self._setup_check_window = None
         self._reporting_error = False
         self._voice_error_shown = False
         self._voice_playing = False
@@ -140,7 +142,7 @@ class MascotApp(WindowMixin, RoutineMixin, WatchMixin, TimerMixin, VoiceMixin, P
         self.after(FIRST_BLINK_MS, self._blink)
         self.after(POINTER_POLL_MS, self._watch_pointer)
         self.after(KEEP_ON_TOP_MS, self._keep_on_screen)
-        threading.Thread(target=self._check_model, daemon=True).start()
+        threading.Thread(target=self._check_model, args=(not with_windows,), daemon=True).start()
 
     def report_callback_exception(self, exc_type, value, tb) -> None:
         """Errors inside Tk callbacks: log them and make sure the user still has a window.
@@ -265,6 +267,7 @@ class MascotApp(WindowMixin, RoutineMixin, WatchMixin, TimerMixin, VoiceMixin, P
         self.menu.add_checkbutton(label="선명하게 보기 (고배율 화면)", variable=self.sharp_var, command=self.toggle_sharp)
         self.menu.add_command(label="내 이름 설정", command=self.ask_user_name)
         self.menu.add_command(label="AI 설정…", command=self.open_ai_settings)
+        self.menu.add_command(label="준비 확인…", command=self.open_setup_check)
         self.menu.add_separator()
         self.menu.add_command(label="일정 보기", command=lambda: ScheduleWindow(self, self.schedule))
         self.menu.add_command(label="오늘 일정 브리핑", command=lambda: self.brief_today(force=True))
@@ -446,6 +449,7 @@ class MascotApp(WindowMixin, RoutineMixin, WatchMixin, TimerMixin, VoiceMixin, P
             "prices": self._show_price_results,
             "notice": self._on_notice,
             "briefing": self._on_briefing,
+            "setup_needed": self._on_setup_needed,
         }.get(kind)
         if handler is not None:
             handler(*values)
@@ -490,6 +494,12 @@ class MascotApp(WindowMixin, RoutineMixin, WatchMixin, TimerMixin, VoiceMixin, P
         else:
             self.say(message, expression)
 
+    def _on_setup_needed(self) -> None:
+        if self.state() == "withdrawn":  # the picker is still open: open it after picking
+            self._setup_held = True
+        else:
+            self.open_setup_check()
+
     def _set_busy(self, busy: bool) -> None:
         self.busy = busy
         if busy:
@@ -499,16 +509,19 @@ class MascotApp(WindowMixin, RoutineMixin, WatchMixin, TimerMixin, VoiceMixin, P
             if self.chat.visible:
                 self.chat.focus()
 
-    def _check_model(self) -> None:
+    def _check_model(self, offer_setup: bool = False) -> None:
         client, model = OllamaClient(self.settings.ollama_url), self.settings.model
         try:
             installed = client.list_models()
         except Exception as exc:  # noqa: BLE001 - shown to the user, app keeps running
             self.events.put(("notice", f"{exc}\n설치: https://ollama.com", "sad"))
+            if offer_setup:
+                self.events.put(("setup_needed",))
             return
-        names = set(installed) | {name.removesuffix(":latest") for name in installed}
-        if model not in names:
+        if not has_model(installed, model):
             self.events.put(("notice", f"'{model}' 모델이 아직 없어요.\n터미널에서 ollama pull {model} 을 실행해 주세요.", "surprised"))
+            if offer_setup:
+                self.events.put(("setup_needed",))
 
     # ----- confirm cards -------------------------------------------------------------
 

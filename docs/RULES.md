@@ -46,7 +46,7 @@ src/nuri_assistant/
     │               art(프레임 찾기·캐시), speech_bubble(말풍선), timer_badge(타이머 배지), chatbox, confirm_card,
     │               picker(비서 선택), placeholder(그림 없는 캐릭터)
     ├── windows/    메뉴에서 여는 파스텔 창: schedule, todo, price(최저가), price_settings, voice_settings,
-    │               conversation_log(대화 기록), memos(기억 수첩), ai_settings(모델·Ollama 주소·대화 기억 길이·가벼운 모드), focus_dialog(집중 타이머 시간·반복·멈춤),
+    │               conversation_log(대화 기록), memos(기억 수첩), ai_settings(모델·Ollama 주소·대화 기억 길이·가벼운 모드), setup_check(준비 확인: Ollama·모델·음성 상태와 모델 받기), focus_dialog(집중 타이머 시간·반복·멈춤),
     │               rename_preview(대화 파일 정리의 전체 목록, 확인 카드 "목록" 버튼),
     │               rename_settings(파일 정리 설정: 이름 형식·기본 매체코드·파일 종류·정리된 파일 건너뛰기),
     │               routine_settings(생활 알림 설정: 브리핑·하루 정리 시각, 날씨 도시, 혼잣말 빈도·알림 종류별 끄기·전체 화면 조용히, 자리 비움·쉬는 시간·물 알림),
@@ -95,6 +95,7 @@ docs/                          RULES.md(이 문서), TODO.md(남은 일)
 - 첫 실행 개인정보 안내: `privacy_shown`이 거짓이면 비서를 고른 뒤 2.5초에 `PrivacyWindow`, 닫으면 참. 메뉴에서 다시 열 수 있음. 밖으로 나가는 것을 새로 추가하면 이 창 문구도 고칩니다.
 - 정각 알림(`hourly_chime`, 기본 꺼짐): 8~23시 정각부터 3분 안(`CHIME_WINDOW_MIN`)에 `_routine_step`이 한 번(`last_chime` = "YYYY-MM-DDTHH"), 브리핑·하루 정리·기념일 뒤 1분이 지나야. 바쁘거나 전체 화면·집중 타이머 중이면 그 시각은 건너뜀. 명절·계절 첫날은 기념일과 같은 자리(`last_occasion`, `notify_occasion`)에서 생일·N일이 없는 날에만. 설날·추석은 `fun/seasons.py` 표가 2030년까지라 그 뒤는 표를 늘려야 함.
 - 가벼운 모드(`light_mode`, AI 설정): 음성 끔(`_voice_on()`이 거짓, 시스템 프롬프트에도 `<ja>` 요청 안 함), 깜박임 간격 2배(`LIGHT_SLOWDOWN`), 대기 표정 바꾸기 없음, 모델에 보내는 지난 대화 최대 10개(`LIGHT_HISTORY`). `num_ctx`는 줄이지 않음(시스템 프롬프트+도구 설명이 2048을 넘어 앞이 잘림). 작은 모델(`qwen3:4b`)은 권유만 하고 자동으로 바꾸지 않음.
+- 준비 확인(`companion/setup_check.py`, 창 `ui/windows/setup_check.py`, 메뉴 "준비 확인…"): Ollama 실행·모델 설치·음성(켰을 때만, 선택 단계)을 단계로 보여 주고, 모델이 없으면 "모델 받기"가 Ollama의 `/api/pull`로 받습니다(`OllamaClient.pull`, 진행률 표시). 앱을 켰을 때 준비가 안 돼 있으면 말풍선과 함께 창이 자동으로 뜹니다. 비서 선택 중이면 선택 뒤로 미루고(`_setup_held`), 윈도우 시작과 함께 켜졌으면(`--autostart`) 말풍선만. 설정 저장 뒤의 확인에서는 창을 열지 않습니다.
 - 선명하게 보기(`dpi.py`, 메뉴 체크 `sharp_display`, 기본 꺼짐): 켜면 `app.main()`이 첫 창을 만들기 전에 `SetProcessDpiAwareness(1)`을 부르고, `theme.apply_default_fonts`가 Tk 배율을 96dpi로 고정합니다(글꼴이 픽셀 레이아웃과 어긋나지 않게). 125%·150% 화면에서 Windows가 창을 늘리지 않아 또렷하지만 그만큼 작게 보입니다. 다음 실행부터 적용. 그림과 레이아웃을 배율만큼 키우는 방식은 모든 창의 픽셀 좌표를 바꿔야 해서 하지 않았습니다.
 - exe 묶음(`tools/build_exe.py`, PyInstaller 폴더 방식): `paths.FROZEN`이면 그림·글꼴은 `sys._MEIPASS/assets`에서 찾고, 시작 프로그램 등록은 exe 자신(`"…\NuriAssistant.exe" --autostart`). 원본 시트(`reference_*`)는 묶지 않습니다. `--selfcheck`는 임시 폴더로 캐릭터 창을 띄웠다 닫고 종료 코드 0/1(안내창 없음)이라 빌드 확인에만 씁니다. 새 데이터 폴더를 `assets/` 밖에 만들면 빌드 스크립트에도 넣어야 합니다.
 - 윈도우 시작 때 켜기(`autostart.py`, 메뉴 체크): 설정 파일이 아니라 레지스트리 값이 진실. 켜면 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`에 `NuriAssistant` = `"pythonw.exe" "…\src\run_nuri.py" --autostart`, 끄면 그 값만 지움. 기본 꺼짐, Windows 아니면 메뉴가 회색. `--autostart`로 켜지면 비서 선택 화면 없이 마지막 캐릭터로 시작하고, 첫 인사는 말풍선만(로그인 직후엔 VOICEVOX가 아직 안 떠 있음). 저장소 폴더를 옮기면 다시 켜야 함.

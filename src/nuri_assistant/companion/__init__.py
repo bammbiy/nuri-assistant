@@ -5,6 +5,7 @@ from .memory import ConversationStore
 from .personas import DEFAULT_PERSONA_ID, EXPRESSIONS, PERSONAS, Look, Persona, get_persona
 from .reply import ReplyParser
 from .settings import CompanionSettings, load_settings, save_settings
+from .setup_check import Step, check_setup, has_model, ready
 from .toolbox import ConfirmableAction, ConfirmingTools, ToolBox, parse_confirmation
 
 __all__ = [
@@ -25,10 +26,14 @@ __all__ = [
     "OllamaToolsUnsupported",
     "Persona",
     "ReplyParser",
+    "Step",
     "ToolBox",
     "ToolCall",
+    "check_setup",
     "get_persona",
+    "has_model",
     "load_settings",
     "parse_confirmation",
+    "ready",
     "save_settings",
 ]

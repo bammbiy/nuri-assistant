@@ -31,7 +31,7 @@ python src/run_nuri.py --autostart  # 윈도우 시작 때 쓰는 실행(비서 
 python -m nuri_assistant [--classic]   # 같은 실행 (src/ 안에서, 또는 pip install -e . 뒤 어디서나. 설치하면 nuri-assistant 명령도 생김)
 pip install -e .[dev]             # 선택: 개발용 설치(pyflakes). 그림이 assets/에 있어서 편집 설치(-e)만 지원
 python -m unittest discover -s tests                         # 저장소 루트에서 (테스트는 src.nuri_assistant 로 import)
-python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 249개, tkinter·화면이 없으면 UI 스모크 3개는 건너뜀)
+python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 256개, tkinter·화면이 없으면 UI 스모크 3개는 건너뜀)
 python -m pyflakes src tests tools
 python tools/build_exe.py         # Windows 실행 파일 묶음(dist/NuriAssistant/, pyinstaller 필요). 빌드 뒤 --selfcheck로 켜지는지 확인
 pip install -r tools/requirements-frames.txt                 # 프레임 생성 도구용 (앱에는 필요 없음)
