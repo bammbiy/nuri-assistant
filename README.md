@@ -167,4 +167,4 @@ python -m unittest discover -s tests      # 단위 테스트 (tkinter 없이 실
 pip install -e .                          # 선택: 설치하면 어디서나 nuri-assistant / python -m nuri_assistant 로 실행
 ```
 
-폴더 구조, 설계 원칙, 코드 관례는 [CLAUDE.md](CLAUDE.md)에, 지금까지의 작업 기록은 [HISTORY.md](HISTORY.md)에 있습니다.
+설계 원칙과 작업 방식은 [CLAUDE.md](CLAUDE.md)에, 폴더 구조와 코드 관례는 [docs/RULES.md](docs/RULES.md)에, 남은 일은 [docs/TODO.md](docs/TODO.md)에, 지금까지의 작업 기록은 [HISTORY.md](HISTORY.md)에 있습니다.

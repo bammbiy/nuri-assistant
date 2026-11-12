@@ -1,0 +1,136 @@
+# RULES
+
+상세 구조·코드 관례·UI 관례·캐릭터 표입니다. 매 턴 읽히는 [CLAUDE.md](../CLAUDE.md)를 짧게 두려고 여기로 옮겼습니다. 전체를 읽지 말고 필요한 절·키워드만 Grep으로 찾아 그 부분만 읽으세요. 꼭 지킬 원칙은 CLAUDE.md에 있습니다.
+
+## 구조
+
+```text
+src/run_nuri.py  실행 진입점 (start_nuri.bat이 부름). 내용은 nuri_assistant/app.py의 main()
+src/nuri_assistant/
+├── app.py       main(): --classic 인자, tkinter 확인, 시작 실패 기록·안내창, UI는 여기서 늦게 import
+├── __main__.py  python -m nuri_assistant
+├── companion/   personas(캐릭터 8명: 성격·말투·대사 틀·기본 목소리), llm(Ollama 스트리밍+도구 호출),
+│                brain(모델→도구→모델 루프 최대 4회, 대화 기억, 일본어 번역, 음성 문장 콜백 on_voice), reply(표정 태그·<think>·<ja> 처리, take_voice로 일본어 문장 단위),
+│                memory(캐릭터별 대화), settings(companion.json), affection(캐릭터별 친밀도: 처음·친근·가까움·단짝, 하루 상한),
+│                toolbox(도구 묶음 라우팅, ConfirmingTools 기반 클래스, "응"/"아니" 판정 parse_confirmation)
+├── schedule/    timeparse(한국어 날짜 해석), store, tools(add/list/cancel_event)
+├── todo/        store(마감·잔소리 시점), tools(add/list/complete/delete_todo)
+├── focus/       timer(집중·휴식 단계), tools(start/stop/status) — 확인 카드 없이 바로 실행, log(끝난 집중 블록 기록, 하루 정리용)
+├── presence/    idle(Windows 마지막 입력 시각만), tracker(돌아옴 인사·쉬는 시간·물 알림 시점, 순수 로직),
+│                fullscreen(맨 앞 창이 모니터를 덮고 제목 표시줄이 없는지, 창 제목은 안 읽음), touch(쓰다듬기·연타 판정), chatter(혼잣말 간격)
+├── memo/        기억 수첩: store(사용자에 대한 사실, 모든 캐릭터 공유), tools(remember_fact·forget_fact·list_facts, 확인 카드)
+├── pcwatch/     켜야 동작: downloads(다운로드에 쌓인 파일 수, 이름만), clipboard(복사한 글에서 날짜·쇼핑 링크 찾기, 저장 안 함)
+├── fun/         fortune(날짜+캐릭터로 정해지는 운세), rps(가위바위보), anniversary(생일·만난 지 N일), seasons(명절·기념일·계절 첫날, 설날·추석은 2026~2030 표),
+│                tools(today_fortune·play_rps)
+├── weather/     forecast(Open-Meteo 도시 좌표·오늘 예보, 키 없음), advice(우산·옷차림 문장, 코드가 결정)
+├── pricewatch/  sources(네이버 쇼핑 검색 API, 상품 페이지 JSON-LD/메타), store, checker(알림 규칙), tools
+├── voice/       voicevox(VOICEVOX 호환 HTTP), speaker(번역→합성→재생 스레드, 최신 대사 우선, stream()으로 문장마다 이어 말하기), player
+├── classic/     기존 파일 이름 정리 도구와 구매 비서 (--classic, 메뉴 "파일 정리 도구"·"파일/구매 비서")
+│                tools(대화 도구 rename_files·undo_rename, 확인 카드로 실행), core(스캔·이름 규칙·미리보기·실행·되돌리기), metadata(파일 이름에서 날짜·매체·면 추정),
+│                storage(history.sqlite3 이력, profiles.json 작업 프로필), commands(한국어 요청 → 이름 변경 계획),
+│                shopping(구매 체크리스트 점수, 선택 기능인 OpenAI 조사)
+├── paths.py     사용자 데이터 경로(APP_DIR, companion.json, *.sqlite3, profiles.json, error.log, characters/)와 ASSETS_DIR, LAUNCHER(src/run_nuri.py)
+├── db.py        SQLite 연결 헬퍼 connect() (모든 저장소가 씀)
+├── services.py  캐릭터 앱의 저장소·가격 확인기·타이머·ToolBox 조립 (Tk 없이 만들 수 있음)
+├── announcements.py  AI를 거치지 않는 대사 조립: 일정 알림·잔소리·아침 브리핑(+날씨)·타이머·가격 알림·자리 비움/건강·하루 정리·정각·명절
+├── routine.py   시각 해석(parse_clock), 하루 한 번 시점(daily_due), 정각 알림 시점(hourly_key), "1시간 20분" 표기
+├── autostart.py 윈도우 시작 때 켜기: HKCU\…\Run의 값 하나(NuriAssistant)만 쓰고 지움, pythonw로 --autostart
+├── crashlog.py  error.log 기록과 시작 실패 안내창
+├── screen.py    창 위치 계산: 작업 영역(작업 표시줄 제외)·모든 모니터 영역, 오른쪽 아래 기본 위치
+└── ui/          theme(색·글꼴·공용 위젯·round_rect·draw_pill). ui/__init__은 아무것도 import하지 않음
+    ├── character/  mascot(캐릭터 창, 앱의 중심: 창·애니메이션·이벤트 큐·확인 카드 흐름·메뉴),
+    │               art(프레임 찾기·캐시), speech_bubble(말풍선), timer_badge(타이머 배지), chatbox, confirm_card,
+    │               picker(비서 선택), placeholder(그림 없는 캐릭터)
+    ├── windows/    메뉴에서 여는 파스텔 창: schedule, todo, price(최저가), price_settings, voice_settings,
+    │               conversation_log(대화 기록), memos(기억 수첩), ai_settings(모델·Ollama 주소·대화 기억 길이·가벼운 모드), focus_dialog(집중 타이머 시간·반복·멈춤),
+    │               rename_preview(대화 파일 정리의 전체 목록, 확인 카드 "목록" 버튼),
+    │               rename_settings(파일 정리 설정: 이름 형식·기본 매체코드·파일 종류·정리된 파일 건너뛰기),
+    │               routine_settings(생활 알림 설정: 브리핑·하루 정리 시각, 날씨 도시, 혼잣말 빈도·알림 종류별 끄기·전체 화면 조용히, 자리 비움·쉬는 시간·물 알림),
+│               privacy(첫 실행·메뉴 "개인정보 안내": 밖으로 나가는 것과 보지 않는 것),
+    │               cards(카드 목록 창 공용: 두 번 눌러 삭제, 휠 스크롤)
+    └── classic/    desktop(파일 정리 도구), assistant(옛 파일/구매 비서 창)
+tests/           test_<영역>.py (classic, companion, schedule, pricewatch, todo_focus_voice, announcements, services, entry, screen, presence, weather, routine, affection, memo, pcwatch, fun, interaction, autostart)
+assets/characters/<id>/        상반신 프레임 405×344 + 원본 시트 2장 (reference_sheet, reference_expressions)
+assets/characters/<id>/full/   전신 프레임 405×480
+tools/build_frames.py          원본 시트 → 정렬된 프레임 (캐릭터별 좌표는 CHARACTERS 설정, 의존성은 tools/requirements-frames.txt)
+tools/key_alpha.py             프레임 알파를 0/255로 (Windows 투명 창의 검은 테두리 방지, 여러 번 돌려도 같음)
+research_notes/                웹 조사 작업 메모 (git 제외), reports/ 조사 보고서
+.claude/agents/                서브 에이전트: searcher·helper(Haiku), worker·reviewer(Sonnet), expert(Opus). 분담은 CLAUDE.md
+docs/                          RULES.md(이 문서), TODO.md(남은 일)
+```
+
+사용자 데이터(`~/.nuri-assistant/`): `companion.json`(설정·네이버 API 키, 못 읽으면 `.bak`로 보존), `error.log`(예외 기록), `companion.sqlite3`(대화·일정·할 일·가격 감시), `history.sqlite3`(파일 이름 변경 이력), `profiles.json`(파일 정리 도구의 작업 프로필), `characters/<id>/`(개인 캐릭터 이미지, 저장소보다 우선).
+
+## 코드 관례
+
+- SQLite는 매 호출마다 연결을 열고 반드시 닫습니다. 저장소의 `_connect()`는 `db.connect(path, rows=...)`를 돌려주기만 합니다. 안 닫으면 Windows에서 파일이 잠깁니다.
+- 사용자 데이터·그림 경로는 `paths.py`에만 적습니다(`Path(__file__).parents[N]`을 다른 곳에 쓰지 않음. 파일을 옮기면 조용히 깨짐). `MascotApp(app_dir)`는 다른 폴더를 받을 수 있으므로 거기서는 파일 이름(`.name`)만 가져다 씁니다.
+- 파일 이동은 `classic.core.operations.move_no_clobber`만 씁니다. `Path.rename`은 macOS/Linux에서 기존 파일을 덮어씁니다.
+- 새 도구 묶음은 `specs`, `execute`, `take_pending`, `owns`, `confirm`을 갖춘 클래스로 만들어(확인 카드가 필요하면 `ConfirmingTools`를 상속하고 `action_type`만 지정) `services.py`의 `ToolBox([...])`에 넣고, 페르소나 시스템 프롬프트(`personas.py`의 `abilities`)에 쓰임새를 한 줄 추가합니다. 확인 카드는 액션의 `kind`(add/done/rename/undo는 보라 버튼, cancel/delete는 빨간 버튼, 버튼 글자는 `confirm_card.YES_LABELS`), `heading`, `when`, `title`만 읽습니다(`companion.toolbox.ConfirmableAction`).
+- 앱이 스스로 하는 대사(원칙 5)는 `announcements.py`에서 조립하고 `tests/test_announcements.py`에 사례를 넣습니다. `MascotApp`은 저장소 갱신과 `talk()`/`say()`만 합니다.
+- 캐릭터 창의 시간 값(깜박임, 입 움직임, 표정 복귀, 폴링 주기 등)은 `ui/character/mascot.py` 위쪽 `*_MS` 상수에 모여 있습니다.
+- 테스트용 가짜 클라이언트의 `chat_stream`은 `(model, messages, options=None, tools=None)`을 받아야 합니다.
+- 오류가 나도 창은 보여야 합니다. 시작 실패는 `app.main()`이 `crashlog`로 `error.log`에 남기고 안내창을 띄웁니다. Tk 콜백 예외는 `MascotApp.report_callback_exception`이 기록하고, 숨겨진 창(비서 선택 중)이면 다시 보이게 합니다. `after()`로 반복하는 루프는 본문을 별도 함수로 빼고 `finally`에서 다시 예약합니다(예외 한 번에 루프가 멈추면 앱이 굳은 것처럼 보임).
+- import는 패키지 안에서 상대 경로(`from ..schedule import ...`)만 씁니다. `from nuri_assistant import`처럼 쓰면 테스트(`src.nuri_assistant`)에서 패키지가 두 번 로드됩니다. 순서는 표준 라이브러리 → 점이 많은 상대 import → 점이 적은 상대 import, 그 안에서는 이름순.
+- 새 창은 쓰임새에 맞는 `ui/` 하위 폴더에 둡니다: 캐릭터 캔버스에 그리는 것은 `character/`, 메뉴에서 여는 창은 `windows/`, 파일 정리 도구 쪽은 `classic/`. 공용 그리기 함수는 `ui/theme.py`, 카드 목록 창 공용 동작은 `ui/windows/cards.py`에 둡니다(`windows/`의 창끼리는 서로 import하지 않음).
+- 최상위 `nuri_assistant/__init__.py`의 이름들은 옛 파일 정리 도구의 API를 호환용으로 다시 내보내는 것입니다. 새 기능은 각 영역 패키지에서 바로 import합니다.
+- 텍스트 파일은 항상 `encoding=`을 지정합니다(한국어 Windows 기본은 cp949). 사용자가 메모장으로 고칠 수 있는 파일은 `utf-8-sig`와 cp949도 읽습니다.
+- 백그라운드 작업(모델 호출, 가격 조회, 음성 합성)은 스레드에서 돌리고 결과는 `MascotApp.events` 큐에 `("종류", 값...)`으로 넘깁니다. 새 종류는 `_handle_event`의 표에 `_on_<종류>` 메서드로 추가합니다. 스레드에서 Tk 위젯을 직접 만지지 않습니다.
+- 말풍선과 음성을 함께 낼 때는 `MascotApp.talk()`, 말풍선만이면 `say()`. 오류·안내 문구는 읽지 않습니다.
+- 모델 답변의 일본어 음성 대사는 `<ja>…</ja>`로 받고 `ReplyParser.voice`에 담깁니다(말풍선과 대화 기억에는 남기지 않음).
+- 문장 단위 음성: 답변을 보낼 때 `send()`가 `VoiceSpeaker.stream()`을 열고, 모델이 `<ja>` 안에서 문장(。！？!?♪… 또는 줄바꿈)을 끝낼 때마다 `Companion.reply(on_voice=)` → `VoiceStream.add`. 합성은 순서대로 하나씩(VOICEVOX 다중도 1), 앞 문장이 재생되는 동안 다음 문장을 합성. 최종 답변 라운드가 문장을 하나도 내보내지 않았으면(`CompanionReply.voiced`가 거짓: `<ja>`가 없거나, 도구 호출 전 라운드에서만 말함) 끝난 뒤 예전처럼 `<ja>` 또는 번역으로 말합니다. 새 `speak()`/`stream()`은 이전 것을 낡은 것으로 만들어 남은 문장을 버립니다(최신 대사 우선: 답변 중 일정 알림이 오면 답변 음성은 거기서 끊김). 스트림의 `on_start`/`on_end`는 전체에 한 번씩이라 문장 사이에도 입이 움직이고, 스트림은 `_ask`의 `finally`에서 반드시 닫습니다. 앱이 스스로 하는 대사(`talk()`)는 지금처럼 한 번에.
+- 파일 이름 규칙은 내부적으로 `{DATE}`·`{YEAR}`·`{MONTH}`·`{DAY}`·`{MEDIA}`·`{PAGE}`(설정 창에는 `{날짜}`·`{연도}`·`{월}`·`{일}`·`{매체}`·`{페이지}`, 변환은 `classic.core.naming`의 `rule_from_korean`/`rule_to_korean`). `{PAGE}`는 필수이고 중괄호 짝이 안 맞는 규칙도 거부(`validate_rule`), `{MEDIA}`가 없으면 매체코드를 묻지 않습니다. 대화 도구는 `CompanionSettings.rename_*`를 `services.rename_options()`로 받아(메모장으로 고친 확장자 `"pdf"`·문자열도 정리) 매번 읽으므로 설정을 바꾸면 바로 적용됩니다. 요청 문장에 규칙을 말하면("매체-날짜 순") 그쪽이 우선.
+- 생활 알림: 아침 브리핑은 `briefing_time`이 비면 앱을 켤 때 하루 한 번, 정하면 그 시각부터 하루 한 번(`last_briefing`). 하루 정리는 `wrapup_time`(기본 18:00)부터 3시간 안에만(`WRAPUP_WINDOW`, 늦게 켠 날은 건너뜀). 두 줄이 같은 폴링에 겹치지 않게 한 번에 하나. 자리 비움은 `presence.idle_seconds()`(Windows만, 다른 OS는 None이라 꺼짐)를 30초마다 `PresenceTracker`에 넣고, 앱이 바쁘거나 확인 카드·비서 선택·집중 타이머 중이면 `quiet`: 돌아옴 인사와 물 알림은 미루고 연속 사용 시간은 새로 셉니다.
+- 친밀도(`companion/affection.py`): 대화 답변 +1(하루 30), 확인 카드 승인 +1, 할 일 완료 +3, 10분 이상 집중 +3, 캐릭터별 하루 최대 40점, 내려가지 않음. 단계가 오르면 답변·카드가 끝난 뒤 `level_up` 대사. 시스템 프롬프트에 단계 이름과 기억 수첩의 최근 30개(`MAX_FACTS`)가 `Companion(context=...)`로 매 메시지 들어갑니다(모델 스레드에서 읽으니 SQLite만 만짐).
+- 켜야 동작하는 PC 감시(`pcwatch/`, 기본 꺼짐): 다운로드는 10분마다 파일 이름만 세어 하루 한 번(`last_downloads_nudge`) `rename_files` 미리보기 카드, 복사한 글은 2초마다 보되 원문 대신 지문(sha256)만 기억하고 1분에 한 번만 `add_event`/`add_price_watch` 카드. 날짜 단어 하나만 있는 글("오늘 날씨 좋다")은 무시. 바쁘거나 카드가 떠 있으면 건너뛰고 다음에 다시 봅니다.
+- 기념일(`fun/anniversary.py`): 생일(`user_birthday`, 생활 알림 설정)과 처음 켠 날(`first_met`, 첫 실행 때 저장)부터 100·200·300·500·1000일·매년. 하루 한 번(`last_occasion`), 브리핑·하루 정리 뒤 1분(`ROUTINE_GAP_S`) 지나서.
+- 먼저 말 걸기(`presence/chatter.py`·`touch.py`): 혼잣말은 `chatter`(많이 15분·보통 40분·조금 90분·끄기, ±30% 흔들림) 동안 아무 말도 없을 때만 `idle_talk`. 앱이 말할 때마다(`say()`) 시계가 처음부터. 혼잣말 차례가 아니면 3~7분마다 표정만 잠깐 바꿈. 머리(그림 위 35%)를 버튼 없이 좌우로 4번 문지르면 `pats`(8초에 한 번), 3초 안에 4번 누르면 `pokes_many`. 돌아옴 인사·레벨업·기념일은 `notify_*`로 따로 끔. 일정·할 일·타이머·가격 알림은 끌 수 없음.
+- 선택 대사의 공통 조건은 `MascotApp._optional_ok()`(전체 화면·바쁨·확인 카드·비서 선택 중이면 아님): 혼잣말·쓰다듬기 반응 외에 돌아옴 인사·레벨업·다운로드·복사한 글·브리핑·하루 정리·기념일이 이걸 보고 미룹니다(날짜를 저장하지 않으니 나중에 나옴).
+- 전체 화면 조용 모드(`fullscreen_quiet`, 기본 켬): `_stay_visible`(3초)이 맨 앞 창이 우리 창·바탕화면·작업 표시줄이 아니고 모니터를 덮으며 `WS_CAPTION`이 없으면 전체 화면으로 봅니다(자동 숨김 작업 표시줄의 최대화 창 제외). 그동안 `-topmost`를 풀고 다시 걸지 않으며, 끝나면 다시 겁니다. 시간이 중요한 알림(일정·할 일·타이머·가격)은 그대로 나와 소리와 음성은 들리지만 말풍선은 게임 뒤에 가려질 수 있습니다(알려진 한계).
+- 첫 실행 개인정보 안내: `privacy_shown`이 거짓이면 비서를 고른 뒤 2.5초에 `PrivacyWindow`, 닫으면 참. 메뉴에서 다시 열 수 있음. 밖으로 나가는 것을 새로 추가하면 이 창 문구도 고칩니다.
+- 정각 알림(`hourly_chime`, 기본 꺼짐): 8~23시 정각부터 3분 안(`CHIME_WINDOW_MIN`)에 `_routine_step`이 한 번(`last_chime` = "YYYY-MM-DDTHH"), 브리핑·하루 정리·기념일 뒤 1분이 지나야. 바쁘거나 전체 화면·집중 타이머 중이면 그 시각은 건너뜀. 명절·계절 첫날은 기념일과 같은 자리(`last_occasion`, `notify_occasion`)에서 생일·N일이 없는 날에만. 설날·추석은 `fun/seasons.py` 표가 2030년까지라 그 뒤는 표를 늘려야 함.
+- 가벼운 모드(`light_mode`, AI 설정): 음성 끔(`_voice_on()`이 거짓, 시스템 프롬프트에도 `<ja>` 요청 안 함), 깜박임 간격 2배(`LIGHT_SLOWDOWN`), 대기 표정 바꾸기 없음, 모델에 보내는 지난 대화 최대 10개(`LIGHT_HISTORY`). `num_ctx`는 줄이지 않음(시스템 프롬프트+도구 설명이 2048을 넘어 앞이 잘림). 작은 모델(`qwen3:4b`)은 권유만 하고 자동으로 바꾸지 않음.
+- 윈도우 시작 때 켜기(`autostart.py`, 메뉴 체크): 설정 파일이 아니라 레지스트리 값이 진실. 켜면 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`에 `NuriAssistant` = `"pythonw.exe" "…\src\run_nuri.py" --autostart`, 끄면 그 값만 지움. 기본 꺼짐, Windows 아니면 메뉴가 회색. `--autostart`로 켜지면 비서 선택 화면 없이 마지막 캐릭터로 시작하고, 첫 인사는 말풍선만(로그인 직후엔 VOICEVOX가 아직 안 떠 있음). 저장소 폴더를 옮기면 다시 켜야 함.
+- `_update_settings`는 `last_*` 키만 바꿀 때 `Companion`을 다시 만들지 않습니다(매시간 정각 기록 때문에 도구 미지원 판정 등이 날아가지 않게).
+- 설정 항목을 추가할 때는 `CompanionSettings`에 기본값과 함께 넣습니다. 알 수 없는 키는 로드 시 무시되므로 옛 설정 파일도 열립니다.
+
+## UI 관례
+
+- 색과 공용 위젯은 `ui/theme.py` (파스텔 라일락: 배경 `#f6f2fb`, 강조 `#a68ae0`, 글자 `#2f2640`, 오늘/달성 `#3fae94`, 위험 `#e06c8a`). 새 창은 기본 ttk 표 대신 이 톤의 캔버스 카드로 만듭니다(일정·할 일·최저가 창 참고). 삭제는 두 번 눌러야 되게 합니다(`ui/windows/cards.py`의 `CardListMixin`). 색·글꼴은 `theme`에서 가져오고, 일부러 다른 색만 모듈에 따로 둡니다.
+- 말풍선은 **모모톡(블루 아카이브 메신저) 스타일**: 캐릭터 말은 남회색 `MOMO_BUBBLE` 바탕에 흰 글씨, 내 말은 파란 `MOMO_USER`, 머리 위 말풍선의 이름표는 핑크 `MOMO_PINK`(모두 `theme.py`). 대화 기록 창은 동그란 얼굴(`CharacterArt.face`, 상반신 frame의 눈 위치 기준으로 잘라 원형 마스크, Pillow 없으면 이름만)과 이름, 말 차례의 첫 말풍선에만 꼬리. 그 밖의 창(일정·할 일·설정 등)은 파스텔 라일락 그대로.
+- 글꼴은 앱에 같이 들어 있는 **나눔스퀘어라운드**(`assets/fonts/`, OFL 1.1, 블루 아카이브 모모톡 같은 둥근 고딕 느낌, Regular·Bold만). `theme.FONT` 하나만 쓰고 글꼴 이름을 직접 적지 않습니다. Windows는 `AddFontResourceEx(FR_PRIVATE)`로 이 프로세스에만 등록하고(설치 안 함), 실패하면 맑은 고딕. 새 Tk 루트를 만들면 `apply_default_fonts(root)`로 메뉴·대화상자·ttk 글꼴도 맞춥니다. 컨테이너에서 화면을 찍을 때는 `~/.local/share/fonts`에 복사하고 `fc-cache -f`.
+- 캐릭터 창 캔버스 겹침 순서: 캐릭터 → 타이머 배지(`timer`) → 말풍선(`bubble`) → 확인 카드(`confirm`) → 채팅창(`chat`). 캐릭터를 다시 그린 뒤 이 순서로 `tag_raise`합니다.
+- 창 위치(`screen.py`, Tk 없음, `tests/test_screen.py`): 처음엔 주 모니터 **작업 영역**(작업 표시줄 제외, Windows `SPI_GETWORKAREA`)의 오른쪽 아래, 가장자리에서 16px. 사용자가 끌어다 놓은 위치는 저장하고, 다음 실행 때 **모든 모니터를 합친 영역**(가상 화면) 안에 80px 이상 보이면 그대로 둡니다(두 번째 모니터 유지). 화면 밖이면(모니터를 뺐을 때 등) 다시 오른쪽 아래로.
+- 항상 위: `-topmost`에 더해 3초마다(`KEEP_ON_TOP_MS`) 다시 걸고 화면 밖으로 사라졌는지 확인합니다(Windows는 전체 화면 앱·다른 항상 위 창 뒤에 맨 위가 풀림). 우리 창(일정·설정 등)이 열려 있거나 끌고 있을 때는 건너뜁니다.
+- 채팅창은 캐릭터에 마우스를 올렸을 때만 보이고, 마우스만으로는 입력 포커스를 가져오지 않습니다.
+- 프레임은 1:1로 보여 줍니다(상반신 405×344, 전신 405×480, 창 폭 `WIDTH = 415`). 실행 중 리샘플링은 화질을 떨어뜨리니 크기를 바꾸려면 `tools/build_frames.py`의 `W, H`/`FULL_W, FULL_H`와 `WIDTH`를 같이 바꿉니다.
+- 전신 모드(`display_mode = "full"`)는 캔버스가 `FULL_EXTRA`(150px) 커지고 창이 위로 늘어납니다. 레이아웃 좌표는 `self.char_bottom`, `self.extra`를 씁니다. 전신 그림이 없는 캐릭터는 상반신으로 나옵니다.
+- Windows 투명 키 색 `#010203`은 캐릭터 창 배경 외에는 쓰지 않습니다. 캐릭터 창 배경은 Windows에서 이 색이 뚫려 **배경 없이 캐릭터만** 보입니다(컨테이너 스크린샷의 연보라 사각형은 리눅스에 투명 기능이 없어 보이는 `FALLBACK_BG`일 뿐).
+- 이 방식은 한 색만 뚫기 때문에 반투명 픽셀이 거의 검정인 키 색과 섞여 **검은 테두리**가 생깁니다. 그래서 캐릭터 프레임의 알파는 0 또는 255만 씁니다: 가장자리는 110에서 자르고, 상반신 아래 40줄의 흐려지는 부분은 잘라 내 일자로 끝나게 합니다(`tools/key_alpha.py`, `build_frames.py`가 저장할 때 자동 적용. 점무늬 디더링은 채팅창 위에서 지저분해 보여서 버림).
+- 캐릭터는 그림의 실제 아래 끝(상반신 자른 선·전신 발끝, `CharacterArt.content_bottom`으로 계산)이 채팅창 위 `CHAT_GAP`(3px)에 오도록 놓습니다. 프레임 아래쪽 투명 줄 수와 상관없이 붙으므로 개인 그림도 같습니다. 개인 그림은 Pillow가 있으면 실행 중에 같은 컷을 적용합니다(`CharacterArt(hard_edges=...)`). 화면 확인은 키 색으로 그린 뒤 키 색 픽셀만 배경으로 바꿔 Windows를 흉내 냅니다.
+
+## 캐릭터
+
+| id | 이름 | 컨셉 | 부르는 말 | 그림 | 기본 목소리(VOICEVOX id) |
+|---|---|---|---|---|---|
+| nuri | 누리 | 다정한 후배 비서 (기본) | 선배 | 상반신+전신 | 春日部つむぎ (8) |
+| sera | 세라 | 어른스러운 누나 비서 | 동생 | 상반신+전신 | 九州そら セクシー (17) |
+| yuki | 유키 | 나긋나긋한 힐링계 | 자기 | 상반신+전신 (2026-10-07 시트 재생성) | WhiteCUL ノーマル (23) |
+| akane | 아카네 | 츤데레 | 너 | 상반신+전신 | 四国めたん ツンツン (6) |
+| shizuku | 시즈쿠 | 쿠데레 | 너 | 상반신+전신 | 冥鳴ひまり (14) |
+| hinata | 히나타 | 백갸루 소꿉친구 (금발 사이드 포니테일·비취색 포인트) | 너 | 상반신+전신 | 雨晴はう (10) |
+| sakura | 사쿠라 | 상냥한 메이드 | 주인님 | 상반신+전신 | 九州そら あまあま (15) |
+| reika | 레이카 | 오죠사마 | 당신 | 상반신+전신 | 四国めたん ノーマル (2) |
+
+목소리 id는 VOICEVOX 기본값 기준이며 실제 설치본에서 확인 전입니다. 8명 모두 그림이 있어 도형 임시 캐릭터(`ui/character/placeholder.py`)는 이제 그림 파일이 없을 때(개인 폴더만 쓰거나 파일이 빠졌을 때)의 대비용입니다.
+
+캐릭터 추가 절차:
+1. `companion/personas.py`의 `PERSONAS`에 `Persona` 추가 (대사 틀, `voice_id`, 임시 그림 색 포함).
+2. 그림: 기본 시트(왼쪽 전신·오른쪽 큰 상반신)와 3×2 표정 시트를 `assets/characters/<id>/`에 두고, `tools/build_frames.py`의 `CHARACTERS`에 좌표를 적습니다. 좌표는 원본을 확대한 좌표 격자 이미지를 보고 손으로 잽니다(눈 사이 중점·거리, 입 중심, 눈 상자, 전신 머리끝·발끝). 업스케일한 시트는 배치가 같으면 기존 좌표에 배율만 곱하면 됩니다. 자세한 규격과 생성 프롬프트는 `assets/characters/README.md`.
+3. 비서 선택 화면에 모든 캐릭터를 나란히 놓고 **그림체가 혼자 다르지 않은지** 먼저 봅니다(선 굵기·채색·눈·얼굴 비율). 다르면 좌표 작업 전에 시트를 다시 뽑습니다(유키 사례).
+4. 프레임 결과를 꼭 검수합니다. 문제는 설정으로 고치고, 손으로 이미지를 고치지 않습니다.
+   - **표정끼리 머리 크기·위치:** 눈 사이 거리만으로 맞추면 표정 시트 칸마다 얼굴 크기가 달라 표정을 바꿀 때 머리가 커졌다 작아집니다. 기본 표정의 머리 윤곽을 다른 표정 위에 겹쳐 그려 보고(어니언 스킨), 머리카락 윤곽과 얼굴 피부 영역이 가장 잘 겹치는 배율·이동을 찾아 `expressions["adjust"]`에 (배율, dx, dy)로 넣습니다. 보정 후 표정별 머리 폭 차이는 ±2% 안이어야 합니다.
+   - **전신 얼굴:** 전신 `mid`/`dist`는 눈동자 중심을 10배 확대해서 재고, 코·입·턱이 상반신과 같은 배율(눈 사이 거리의 배수)인지 확인합니다. 어긋나면 눈·입만 맞아 보이고 얼굴이 이상해집니다. 붙이는 범위는 `full["face"]`(타원 + 표정별 아래 한계)이고, 그 안에서도 얼굴 피부와 앞머리·눈 띠만 가져옵니다(머리카락·헤드셋 줄·손·소매는 전신 그림 것).
+   - 그 밖에: 이름표 글자는 `rows`로 끊기, 배경 번짐(어두운 머리 둘레 안개, 턱과 머리카락 사이 회색 그림자)은 `alpha`(`haze_lum`), 이미 입을 벌린 기본 표정은 `talk=None`, 전신 주변 잔상은 `full["erase"]`, 홍조 있는 얼굴의 눈 감기는 `skin="lerp"`.
+5. 새 프레임은 `build_frames.py`가 알파를 0/255로 바꿔 저장합니다. 손으로 만든 프레임을 넣었다면 `python tools/key_alpha.py <폴더>`를 돌립니다.
+6. 배경 제거(rembg)는 실행마다 아주 약간 결과가 달라질 수 있으니, 고친 캐릭터의 프레임만 교체합니다.
