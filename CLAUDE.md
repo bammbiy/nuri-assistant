@@ -48,7 +48,7 @@ python tools/build_frames.py nuri|sera|yuki|akane|shizuku|hinata|sakura|reika [�
 
 - `src/run_nuri.py` 진입점, `src/nuri_assistant/app.py`의 `main()`
 - `src/nuri_assistant/`: `companion/`(페르소나·Ollama·대화 루프·도구 라우팅·친밀도), `schedule/` `todo/` `focus/` `memo/` `pricewatch/` `weather/` `fun/` `pcwatch/` `presence/` `voice/`(영역별 저장소·도구·순수 로직), `classic/`(파일 이름 정리 도구), `announcements.py`(AI를 거치지 않는 대사), `services.py`(조립), `paths.py`(모든 경로), `db.py`, `routine.py`, `autostart.py`, `screen.py`
-- `ui/`: `character/`(캐릭터 창 `mascot.py`가 앱의 중심), `windows/`(메뉴에서 여는 창), `classic/`, `theme.py`. 단위 테스트는 `ui/`를 import하지 않음
+- `ui/`: `character/`(캐릭터 창 `mascot.py`가 앱의 중심, 기능별 메서드는 `*_mixin.py`, 시간 상수는 `timing.py`), `windows/`(메뉴에서 여는 창), `classic/`, `theme.py`. 단위 테스트는 `ui/`를 import하지 않음
 - `tests/test_<영역>.py`, `tools/build_frames.py`(캐릭터 프레임), `assets/characters/<id>/`, `reports/`
 - 사용자 데이터는 `~/.nuri-assistant/`(설정 `companion.json`, `*.sqlite3`, `error.log`, 개인 캐릭터 그림)
 
@@ -94,7 +94,7 @@ python tools/build_frames.py nuri|sera|yuki|akane|shizuku|hinata|sakura|reika [�
 
 - 가장 싼 길부터. 몇 줄 고치면 끝나는 일은 메인이 바로 고칩니다. 서브 에이전트는 시작할 때마다 문맥을 새로 읽으니 작은 일에는 오히려 비쌉니다.
 - 서브 에이전트는 큰 일에만, 한 번에 2개까지. 지시서에 파일·함수·줄 번호를 적어 다시 검색하지 않게 하고, 끝에 "보고는 25줄 이내"를 붙입니다.
-- 큰 파일은 통째로 읽지 않습니다(`ui/character/mascot.py`, `companion/personas.py`, `announcements.py`, `tools/build_frames.py`, `HISTORY.md`, `docs/RULES.md`, `README.md`). Grep으로 위치를 찾고 그 부분만 offset/limit으로 읽습니다.
+- 큰 파일은 통째로 읽지 않습니다(`ui/character/mascot.py`와 믹스인은 필요한 파일만, `companion/personas.py`, `announcements.py`, `tools/build_frames.py`, `HISTORY.md`, `docs/RULES.md`, `README.md`). Grep으로 위치를 찾고 그 부분만 offset/limit으로 읽습니다.
 - 테스트·로그·diff는 결과 줄만 봅니다(`tail`, `grep`, `git diff --stat`). 전체를 쏟아내지 않습니다.
 - 서로 상관없는 명령은 한 번에 묶어 실행합니다. 이미 본 파일·이미지는 다시 열지 않습니다. 스크린샷은 필요한 부분만 잘라서 봅니다(이미지는 토큰이 큼).
 - 문서 기록과 커밋·푸시는 작업 끝에 한 번에. 사용자 보고는 짧게, 요점만.

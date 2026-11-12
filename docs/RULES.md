@@ -38,7 +38,10 @@ src/nuri_assistant/
 ├── crashlog.py  error.log 기록과 시작 실패 안내창
 ├── screen.py    창 위치 계산: 작업 영역(작업 표시줄 제외)·모든 모니터 영역, 오른쪽 아래 기본 위치
 └── ui/          theme(색·글꼴·공용 위젯·round_rect·draw_pill). ui/__init__은 아무것도 import하지 않음
-    ├── character/  mascot(캐릭터 창, 앱의 중심: 창·애니메이션·이벤트 큐·확인 카드 흐름·메뉴),
+    ├── character/  mascot(캐릭터 창, 앱의 중심: 시작·창 만들기·그리기·말풍선·대화와 이벤트 큐·확인 카드),
+    │               MascotApp에 섞이는 믹스인: window_mixin(위치·항상 위·전체 화면·끌기·마우스), routine_mixin(일정 알림·브리핑·하루 정리·
+    │               정각·혼잣말·친밀도·자리 비움), watch_mixin(다운로드·복사한 글), timer_mixin(집중 타이머), voice_mixin(음성),
+    │               price_mixin(가격 확인), menu_mixin(설정 창·비서 선택·이름·기록), timing(시간·크기 상수),
     │               art(프레임 찾기·캐시), speech_bubble(말풍선), timer_badge(타이머 배지), chatbox, confirm_card,
     │               picker(비서 선택), placeholder(그림 없는 캐릭터)
     ├── windows/    메뉴에서 여는 파스텔 창: schedule, todo, price(최저가), price_settings, voice_settings,
@@ -68,7 +71,8 @@ docs/                          RULES.md(이 문서), TODO.md(남은 일)
 - 파일 이동은 `classic.core.operations.move_no_clobber`만 씁니다. `Path.rename`은 macOS/Linux에서 기존 파일을 덮어씁니다.
 - 새 도구 묶음은 `specs`, `execute`, `take_pending`, `owns`, `confirm`을 갖춘 클래스로 만들어(확인 카드가 필요하면 `ConfirmingTools`를 상속하고 `action_type`만 지정) `services.py`의 `ToolBox([...])`에 넣고, 페르소나 시스템 프롬프트(`personas.py`의 `abilities`)에 쓰임새를 한 줄 추가합니다. 확인 카드는 액션의 `kind`(add/done/rename/undo는 보라 버튼, cancel/delete는 빨간 버튼, 버튼 글자는 `confirm_card.YES_LABELS`), `heading`, `when`, `title`만 읽습니다(`companion.toolbox.ConfirmableAction`).
 - 앱이 스스로 하는 대사(원칙 5)는 `announcements.py`에서 조립하고 `tests/test_announcements.py`에 사례를 넣습니다. `MascotApp`은 저장소 갱신과 `talk()`/`say()`만 합니다.
-- 캐릭터 창의 시간 값(깜박임, 입 움직임, 표정 복귀, 폴링 주기 등)은 `ui/character/mascot.py` 위쪽 `*_MS` 상수에 모여 있습니다.
+- `MascotApp`의 새 메서드는 성격에 맞는 믹스인 파일(`ui/character/*_mixin.py`)에 넣습니다. 믹스인은 `mascot.py`를 import하지 않고, `__init__`을 갖지 않으며(상태는 `MascotApp.__init__`에서 만듦), 상수는 `timing.py`에서 가져옵니다. 새 이벤트 종류는 `mascot.py`의 `_handle_event` 표에 등록합니다.
+- 캐릭터 창의 시간 값(깜박임, 입 움직임, 표정 복귀, 폴링 주기 등)은 `ui/character/timing.py`의 `*_MS`·`*_S` 상수에 모여 있습니다.
 - 테스트용 가짜 클라이언트의 `chat_stream`은 `(model, messages, options=None, tools=None)`을 받아야 합니다.
 - 오류가 나도 창은 보여야 합니다. 시작 실패는 `app.main()`이 `crashlog`로 `error.log`에 남기고 안내창을 띄웁니다. Tk 콜백 예외는 `MascotApp.report_callback_exception`이 기록하고, 숨겨진 창(비서 선택 중)이면 다시 보이게 합니다. `after()`로 반복하는 루프는 본문을 별도 함수로 빼고 `finally`에서 다시 예약합니다(예외 한 번에 루프가 멈추면 앱이 굳은 것처럼 보임).
 - import는 패키지 안에서 상대 경로(`from ..schedule import ...`)만 씁니다. `from nuri_assistant import`처럼 쓰면 테스트(`src.nuri_assistant`)에서 패키지가 두 번 로드됩니다. 순서는 표준 라이브러리 → 점이 많은 상대 import → 점이 적은 상대 import, 그 안에서는 이름순.

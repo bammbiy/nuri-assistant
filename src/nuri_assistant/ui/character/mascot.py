@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import queue
 import random
 import sys
@@ -9,130 +8,54 @@ import time
 import tkinter as tk
 import webbrowser
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from tkinter import messagebox, simpledialog
 
 from ... import autostart
-from ...announcements import (
-    chime_line, clipboard_line, compose_briefing, compose_wrapup, downloads_line, holiday_line, level_up_line, nag_line,
-    occasion_line, presence_line, price_alert_line, reminder_line, timer_line, with_weather,
-)
-from ...classic.core import rule_pattern
-from ...classic.tools import resolve_folder
 from ...classic.tools import RenameAction
 from ...companion import (
-    EXPRESSIONS,
-    PERSONAS,
-    Companion,
-    ConfirmableAction,
-    OllamaClient,
-    get_persona,
-    load_settings,
-    parse_confirmation,
+    EXPRESSIONS, Companion, ConfirmableAction, OllamaClient, get_persona, load_settings, parse_confirmation,
     save_settings,
 )
 from ...crashlog import log_exception
 from ...paths import APP_DIR, ASSETS_DIR, SETTINGS_PATH, USER_CHARACTERS
-from ...fun import fortune_text, holiday_today, occasion_today, today_fortune
-from ...pcwatch import DownloadNudge, count_waiting, suggest
-from ...presence import ClickCombo, IdleChatter, PatDetector, PresenceTracker, foreground_fullscreen, idle_seconds
-from ...pricewatch import CheckResult, WatchAction
-from ...routine import daily_due, hourly_key, parse_clock
-from ...screen import Rect, all_monitors, default_position, is_reachable, work_area
-from ...services import Services, rename_options
+from ...pcwatch import DownloadNudge
+from ...presence import ClickCombo, IdleChatter, PatDetector, PresenceTracker
+from ...pricewatch import WatchAction
+from ...services import Services
 from ...todo import TodoAction
 from ...voice import VoiceSpeaker, VoiceStream, VoicevoxClient
-from ...weather import Place, WeatherError, fetch_today, weather_line
 from ..classic.assistant import AssistantWindow
 from ..classic.desktop import NuriAssistantApp
-from ..windows.ai_settings import AISettingsWindow
-from ..windows.conversation_log import ConversationLogWindow
-from ..windows.focus_dialog import FocusDialog
+from ..theme import apply_default_fonts
 from ..windows.memos import MemoWindow
-from ..windows.price import PriceWindow
-from ..windows.price_settings import PriceSettingsWindow
 from ..windows.privacy import PrivacyWindow
 from ..windows.rename_preview import RenamePreviewWindow
 from ..windows.rename_settings import RenameSettingsWindow
-from ..windows.routine_settings import RoutineSettingsWindow
 from ..windows.schedule import ScheduleWindow
 from ..windows.todo import TodoWindow
-from ..windows.voice_settings import VoiceSettingsWindow
-from ..theme import apply_default_fonts
 from .art import CharacterArt
-from .chatbox import HEIGHT as CHAT_HEIGHT, ChatBox, subject_particle
+from .chatbox import ChatBox, subject_particle
 from .confirm_card import HEIGHT as CARD_HEIGHT, ConfirmCard
-from .picker import CharacterPicker
-from .placeholder import PLACEHOLDER_HEIGHT, draw_emote, draw_placeholder
+from .menu_mixin import MenuMixin
+from .placeholder import draw_emote, draw_placeholder
+from .price_mixin import PriceMixin
+from .routine_mixin import RoutineMixin
 from .speech_bubble import SpeechBubble
-from .timer_badge import draw_timer_badge
+from .timer_mixin import TimerMixin
+from .timing import (
+    BLINK_GAP_MS, BLINK_MS, BRIEFING_DELAY_MS, CANVAS_HEIGHT, CHAR_BOTTOM, CHAR_BOX, CHAR_TOP, CHATTER_POLL_MS,
+    CHAT_GAP, CLIPBOARD_GAP_S, CLIPBOARD_POLL_MS, DOWNLOADS_POLL_MS, EVENT_POLL_MS, FALLBACK_BG, FIRST_BLINK_MS,
+    FIRST_PRICE_CHECK_MS, FIRST_REMINDER_CHECK_MS, FULL_EXTRA, GLANCE_GAP_S, KEEP_ON_TOP_MS, LIGHT_HISTORY,
+    LIGHT_SLOWDOWN, MAX_FACTS, MOUTH_FLAP_MS, POINTER_POLL_MS, PRESENCE_POLL_MS, PRIVACY_DELAY_MS, RELAX_BASE_MS,
+    RELAX_MAX_EXTRA_MS, RELAX_PER_CHAR_MS, RELAX_RETRY_MS, ROUTINE_POLL_MS, TIMER_TICK_MS, TRANSPARENT_KEY, WIDTH,
+)
+from .voice_mixin import VoiceMixin
+from .watch_mixin import WatchMixin
+from .window_mixin import WindowMixin
 
 
-# Character frames are 405px wide and CHAR_BOX is WIDTH - 10, so they show 1:1 with no
-# runtime resampling (which is what made the art look soft, especially without Pillow).
-WIDTH = 415
-CANVAS_HEIGHT = 560
-# The chat box appears right under the character, in the strip below CHAR_BOTTOM.
-CHAR_BOTTOM = CANVAS_HEIGHT - CHAT_HEIGHT - 18
-CHAR_TOP = CHAR_BOTTOM - PLACEHOLDER_HEIGHT
-# Images may rise behind the bubble area so a bust-up drawing is shown large.
-CHAR_BOX = (WIDTH - 10, CHAR_BOTTOM - 120)
-# Full-body frames are 480px tall vs 344px for the bust; the window grows by this much.
-FULL_EXTRA = 150
-# Timings (ms unless noted); together they set how lively the character feels.
-EVENT_POLL_MS = 50
-POINTER_POLL_MS = 120
-CHAT_HIDE_DELAY_MS = 1200
-FIRST_REMINDER_CHECK_MS = 5000
-REMINDER_POLL_MS = 20_000
-TIMER_TICK_MS = 1000
-FIRST_PRICE_CHECK_MS = 30_000
-MIN_PRICE_CHECK_MINUTES = 10
-PRICE_ALERT_GAP_MS = 9000
-BRIEFING_DELAY_MS = 4500
-PRESENCE_POLL_MS = 30_000  # idle time is checked this often (Windows only)
-ROUTINE_POLL_MS = 30_000   # scheduled briefing / evening wrap-up check
-SECOND_LINE_GAP_MS = 9000  # when two presence lines are due at once
-LEVEL_UP_DELAY_MS = 2500   # a closeness level-up line follows the reply it came from
-MIN_FOCUS_FOR_POINTS = 10  # shorter focus blocks earn no closeness points
-MAX_FACTS = 30             # newest remembered facts put into the system prompt
-ROUTINE_GAP_S = 60         # a special-day line waits this long after a briefing or wrap-up
-DOWNLOADS_POLL_MS = 600_000  # opt-in Downloads check (file names only)
-CLIPBOARD_POLL_MS = 2000     # opt-in clipboard check (text is never stored)
-CLIPBOARD_GAP_S = 60         # at most one clipboard suggestion a minute
-CHATTER_POLL_MS = 30_000     # idle talk / idle glance check
-GLANCE_GAP_S = (180, 420)    # now and then a quiet change of face, no words
-GLANCE_MS = 2500
-HEAD_SHARE = 0.35            # top part of the character counted as the head (pats)
-PRIVACY_DELAY_MS = 2500      # first start: privacy notice after the greeting
-DAY_WORDS_ONLY = {"오늘", "내일", "모레", "글피", "내일모레"}  # a bare day word is not an appointment
-WRAPUP_WINDOW = timedelta(hours=3)  # an app started later than this after the wrap-up time skips it
-FIRST_BLINK_MS = 3500
-BLINK_MS = 140
-BLINK_GAP_MS = (2500, 6000)
-LIGHT_SLOWDOWN = 2         # light mode: blink half as often, no idle glances
-LIGHT_HISTORY = 10         # light mode: at most this many past messages go to the model
-MOUTH_FLAP_MS = 130
-# The face relaxes to neutral after a base delay plus a little per character of text.
-RELAX_BASE_MS = 6000
-RELAX_PER_CHAR_MS = 60
-RELAX_MAX_EXTRA_MS = 9000
-RELAX_RETRY_MS = 2000
-# Notices that arrived while the picker was open are replayed after picking.
-HELD_NOTICE_DELAY_MS = 3500
-HELD_NOTICE_GAP_MS = 4000
-# Pointer travel (px) before a press on the character counts as a drag, not a poke.
-DRAG_THRESHOLD_PX = 4
-CHAT_GAP = 3  # px between the character's bottom and the chat box
-KEEP_ON_TOP_MS = 3000  # re-assert topmost / on-screen
-# Windows keys this exact color out of the window. A near-black key keeps
-# anti-aliased PNG edges looking like line art instead of a colored halo.
-TRANSPARENT_KEY = "#010203"
-FALLBACK_BG = "#f3eff7"
-
-
-class MascotApp(tk.Tk):
+class MascotApp(WindowMixin, RoutineMixin, WatchMixin, TimerMixin, VoiceMixin, PriceMixin, MenuMixin, tk.Tk):
     """Desktop companion: an always-on-top character that chats through a local model."""
 
     def __init__(self, app_dir: Path = APP_DIR, with_windows: bool = False) -> None:
@@ -368,153 +291,6 @@ class MascotApp(tk.Tk):
         self.menu.add_separator()
         self.menu.add_command(label="종료", command=self.quit_app)
 
-    def _place_window(self) -> None:
-        """Saved spot if it is still on a monitor, else bottom-right above the taskbar."""
-
-        self.update_idletasks()
-        height = self.winfo_reqheight()
-        x, y = self.settings.x, self.settings.y
-        if x is None or y is None or not is_reachable(int(x), int(y), WIDTH, height, self._monitors()):
-            x, y = default_position(self._work_area(), WIDTH, height)
-        self.geometry(f"+{int(x)}+{int(y)}")
-
-    def _work_area(self) -> Rect:
-        return work_area(self.winfo_screenwidth(), self.winfo_screenheight())
-
-    def _monitors(self) -> Rect:
-        return all_monitors(self.winfo_screenwidth(), self.winfo_screenheight())
-
-    def _keep_on_screen(self) -> None:
-        try:
-            self._stay_visible()
-        finally:
-            self.after(KEEP_ON_TOP_MS, self._keep_on_screen)
-
-    def _stay_visible(self) -> None:
-        """Windows drops "topmost" after full-screen apps or other topmost windows, and a
-        monitor change can strand the window off-screen: re-assert both every few seconds."""
-
-        if self.state() == "withdrawn" or self._drag_start is not None:
-            return
-        if not is_reachable(self.winfo_x(), self.winfo_y(), WIDTH, self.winfo_height(), self._monitors()):
-            x, y = default_position(self._work_area(), WIDTH, self.winfo_height())
-            self.geometry(f"+{x}+{y}")
-            self._update_settings(x=x, y=y)
-        was_fullscreen, self._fullscreen = self._fullscreen, self._check_fullscreen()
-        if self._fullscreen:
-            if not was_fullscreen:
-                self.attributes("-topmost", False)  # let the game or video cover us; back when it ends
-            return
-        # Not while our own windows are open: re-raising would cover them.
-        if not any(isinstance(w, tk.Toplevel) and w.winfo_viewable() for w in self.winfo_children()):
-            self.attributes("-topmost", True)
-
-    def _check_fullscreen(self) -> bool:
-        if not self.settings.fullscreen_quiet:
-            return False
-        own = {self.winfo_id()}
-        try:
-            own.add(int(self.wm_frame(), 16))
-        except (tk.TclError, ValueError):
-            pass
-        return bool(foreground_fullscreen(own))
-
-    def _optional_ok(self) -> bool:
-        """Optional lines (idle talk, greetings, level-ups, suggestions) wait while the user is busy
-        with something else; schedule, to-do, timer and price alerts are never held back."""
-
-        return not (self._fullscreen or self.busy or self.card.visible or self.state() == "withdrawn")
-
-    def _on_press(self, event: tk.Event) -> None:
-        self._drag_start = (event.x_root, event.y_root, self.winfo_x(), self.winfo_y())
-        self._dragged = False
-
-    def _on_drag(self, event: tk.Event) -> None:
-        if self._drag_start is None:
-            return
-        start_x, start_y, win_x, win_y = self._drag_start
-        dx, dy = event.x_root - start_x, event.y_root - start_y
-        if abs(dx) + abs(dy) > DRAG_THRESHOLD_PX:
-            self._dragged = True
-        if self._dragged:
-            self.geometry(f"+{win_x + dx}+{win_y + dy}")
-
-    def _on_release(self, _event: tk.Event) -> None:
-        self._drag_start = None
-        if self._dragged:
-            self._update_settings(x=self.winfo_x(), y=self.winfo_y())
-        elif not self.busy:
-            if self.combo.click(time.monotonic()):
-                self.talk(random.choice(self.persona.pokes_many), "angry")
-            else:
-                self.talk(random.choice(self.persona.pokes), random.choice(("surprised", "shy", "happy")))
-            self.chat.focus()
-
-    def _on_motion(self, event: tk.Event) -> None:
-        """Rubbing the pointer back and forth over the head (no button) is a pat."""
-
-        box = self.canvas.bbox("character")
-        on_head = (box is not None and event.state & 0x0100 == 0
-                   and box[0] <= event.x <= box[2] and box[1] <= event.y <= box[1] + (box[3] - box[1]) * HEAD_SHARE)
-        if not on_head:
-            self.pat.reset()
-        elif self.pat.feed(event.x, time.monotonic()) and not self.busy:
-            self.talk(random.choice(self.persona.pats), "shy")
-
-    def _show_menu(self, event: tk.Event) -> None:
-        self.menu.tk_popup(event.x_root, event.y_root)
-
-    def _idle_hint(self) -> str:
-        return f"{self.persona.name}에게 말 걸기…"
-
-    def _watch_pointer(self) -> None:
-        """Show the chat box while the mouse is on the character (or the box itself)."""
-
-        try:
-            self._update_hover()
-        finally:
-            self.after(POINTER_POLL_MS, self._watch_pointer)
-
-    def _update_hover(self) -> None:
-        px, py = self.winfo_pointerxy()
-        x, y = px - self.canvas.winfo_rootx(), py - self.canvas.winfo_rooty()
-        box = self.canvas.bbox("character")
-        over_character = box is not None and box[0] - 8 <= x <= box[2] + 8 and box[1] <= y <= box[3] + 12
-        keep = (
-            over_character
-            or self.chat.contains(x, y)
-            or self.busy
-            or (self.chat.focused() and bool(self.chat.text()))
-            or self._drag_start is not None
-        )
-        now = time.monotonic()
-        if keep:
-            self._last_hover = now
-            self.chat.show()
-        elif self.chat.visible and (now - self._last_hover) * 1000 > CHAT_HIDE_DELAY_MS:
-            self.chat.hide()
-
-    def set_display_mode(self, mode: str) -> None:
-        """Switch bust/full body; the window grows upward so the character's feet stay put."""
-
-        full = mode == "full"
-        if full == self.full_mode:
-            return
-        dy = (FULL_EXTRA if full else 0) - self.extra
-        self.full_mode, self.extra = full, FULL_EXTRA if full else 0
-        self.full_var.set(full)
-        self.canvas.configure(height=CANVAS_HEIGHT + self.extra)
-        self.canvas.move("chat", 0, dy)
-        self.chat.top += dy
-        self.card.top += dy
-        if self.card.visible:
-            self._show_next_card()
-        self.update_idletasks()
-        y = max(self.winfo_y() - dy, self._monitors().top)
-        self.geometry(f"+{self.winfo_x()}+{y}")
-        self._update_settings(display_mode=mode, y=y)
-        self._render_character()
-        self._show_bubble(self.bubble.text)
 
     # ----- character --------------------------------------------------------------
 
@@ -732,7 +508,7 @@ class MascotApp(tk.Tk):
         if model not in names:
             self.events.put(("notice", f"'{model}' 모델이 아직 없어요.\n터미널에서 ollama pull {model} 을 실행해 주세요.", "surprised"))
 
-    # ----- confirm cards & reminders ------------------------------------------------
+    # ----- confirm cards -------------------------------------------------------------
 
     def _show_next_card(self) -> None:
         if not self.pending_actions:
@@ -771,480 +547,7 @@ class MascotApp(tk.Tk):
             self.say(message, "neutral")
         self._show_next_card()
 
-    def _check_reminders(self) -> None:
-        try:
-            self._remind_due()
-        finally:
-            self.after(REMINDER_POLL_MS, self._check_reminders)
 
-    def _remind_due(self) -> None:
-        if self.state() != "withdrawn" and not self.busy:
-            now = datetime.now()
-            due = self.schedule.due_reminders(now)
-            if due:
-                # One per poll so bubbles do not overwrite each other; the rest stay due.
-                event = due[0]
-                self.schedule.mark_reminded(event.id)
-                self.talk(reminder_line(self.persona, event, now), "surprised")
-                self.bell()
-            elif nags := self.todos.due_nags(now):
-                todo, kind = nags[0]
-                self.todos.mark_nagged(todo.id, kind)
-                self.talk(*nag_line(self.persona, todo, kind))
-                self.bell()
-
-    def brief_today(self, force: bool = False) -> None:
-        """Once a day (at start-up, or from the set time on) or on request: today's events and weather."""
-
-        now = datetime.now()
-        today = now.date().isoformat()
-        if not force:
-            clock = parse_clock(self.settings.briefing_time)
-            due = daily_due(now, clock, self.settings.last_briefing) if clock else self.settings.last_briefing != today
-            if not due or self._fullscreen:  # behind a game: _routine_step brings it later
-                return
-            self._update_settings(last_briefing=today)
-        if self.settings.weather_lat is not None and self.settings.weather_lon is not None:
-            place = Place(self.settings.weather_city, self.settings.weather_lat, self.settings.weather_lon)
-            threading.Thread(target=self._fetch_weather, args=(place, force), daemon=True).start()
-        else:
-            self._on_briefing(None, force)
-
-    def _fetch_weather(self, place: Place, force: bool) -> None:
-        try:
-            line = weather_line(place.name, fetch_today(place, datetime.now()))
-        except WeatherError:
-            line = None  # no weather today; the schedule part of the briefing still comes
-        self.events.put(("briefing", line, force))
-
-    def _on_briefing(self, weather: str | None, force: bool) -> None:
-        now = datetime.now()
-        start = datetime.combine(now.date(), datetime.min.time())
-        events = self.schedule.between(start, start + timedelta(days=1))
-        urgent = [todo for todo in self.todos.open() if todo.due and todo.due.date() <= now.date()]
-        briefing = with_weather(compose_briefing(self.persona, events, urgent, now.date()), weather)
-        if briefing is None:
-            if force:
-                self.say("오늘은 일정도 급한 할 일도 없어요.", "neutral")
-            return
-        text, headline = briefing
-        self.say(text, "happy")
-        self.speak(headline)
-        self._last_routine_line = time.monotonic()
-
-    def wrap_up(self, force: bool = False) -> None:
-        """Evening wrap-up: focus blocks and finished to-dos today, and tomorrow's first event."""
-
-        now = datetime.now()
-        if not force:
-            self._update_settings(last_wrapup=now.date().isoformat())
-        start = datetime.combine(now.date(), datetime.min.time())
-        tomorrow = start + timedelta(days=1)
-        text, headline = compose_wrapup(self.persona, self.focus_log.summary(start, tomorrow),
-                                        self.todos.done_between(start, tomorrow),
-                                        self.schedule.between(tomorrow, tomorrow + timedelta(days=1)))
-        self.say(text, "happy")
-        self.speak(headline)
-        self._last_routine_line = time.monotonic()
-
-    def _routine_loop(self) -> None:
-        try:
-            self._routine_step()
-        finally:
-            self.after(ROUTINE_POLL_MS, self._routine_loop)
-
-    def _routine_step(self) -> None:
-        # Full screen: wait, so the briefing and wrap-up are not used up behind a game.
-        if not self._optional_ok():
-            return
-        now = datetime.now()
-        clock = parse_clock(self.settings.briefing_time)
-        # One routine line per poll, so a late start does not put the wrap-up over the briefing.
-        briefing_due = (daily_due(now, clock, self.settings.last_briefing) if clock
-                        else self.settings.last_briefing != now.date().isoformat())
-        if briefing_due:
-            self.brief_today()
-        elif daily_due(now, parse_clock(self.settings.wrapup_time), self.settings.last_wrapup, WRAPUP_WINDOW):
-            self.wrap_up()
-        elif (self.settings.notify_occasion and self.settings.last_occasion != now.date().isoformat()
-              and time.monotonic() - self._last_routine_line >= ROUTINE_GAP_S):
-            self._update_settings(last_occasion=now.date().isoformat())
-            occasion = occasion_today(now.date(), self.settings.user_birthday, self.settings.first_met)
-            holiday = None if occasion else holiday_today(now.date())
-            if occasion:
-                self.talk(*occasion_line(self.persona, occasion.kind, occasion.days))
-            elif holiday:
-                self.talk(*holiday_line(self.persona, holiday))
-            self._last_routine_line = time.monotonic()
-        elif (self.settings.hourly_chime and time.monotonic() - self._last_routine_line >= ROUTINE_GAP_S
-              and self.focus_timer.state(now).phase is None):  # not over a focus block
-            key = hourly_key(now, self.settings.last_chime)
-            if key:
-                self._update_settings(last_chime=key)
-                self.talk(*chime_line(self.persona, now))
-                self._last_routine_line = time.monotonic()
-
-    # ----- idle talk and glances ------------------------------------------------------
-
-    def _chatter_loop(self) -> None:
-        try:
-            self._chatter_step()
-        finally:
-            self.after(CHATTER_POLL_MS, self._chatter_loop)
-
-    def _chatter_step(self) -> None:
-        if not self._optional_ok() or self.talking or self.chat.focused():
-            return
-        now = datetime.now()
-        if self.chatter.due(now):
-            self.talk(random.choice(self.persona.idle_talk), random.choice(("happy", "neutral", "thinking")))
-            self.chatter.spoke(now)
-        elif time.monotonic() >= self._next_glance and self.expression == "neutral" and not self.settings.light_mode:
-            self._next_glance = time.monotonic() + random.uniform(*GLANCE_GAP_S)
-            self.set_expression(random.choice(("happy", "thinking", "shy")))
-            self._relax_later(GLANCE_MS)
-
-    def _first_privacy_notice(self) -> None:
-        if self.state() == "withdrawn":  # still picking a character
-            self.after(PRIVACY_DELAY_MS, self._first_privacy_notice)
-            return
-        PrivacyWindow(self, lambda: self._update_settings(privacy_shown=True))
-
-    # ----- closeness, fortune --------------------------------------------------------
-
-    def gain(self, reason: str) -> None:
-        """Closeness points for the current character; a level-up gets its own line after the reply."""
-
-        try:
-            level = self.affection.add(self.persona.id, reason, datetime.now())
-        except Exception:  # noqa: BLE001 - points are a bonus; never block the chat or the card flow
-            log_exception(*sys.exc_info())
-            return
-        if level:
-            self.after(LEVEL_UP_DELAY_MS, lambda persona=self.persona: self._say_level_up(persona, level))
-
-    def _say_level_up(self, persona, level: int) -> None:
-        if persona is not self.persona:
-            return  # switched characters meanwhile
-        if not self.settings.notify_level_up:
-            return
-        if not self._optional_ok():
-            self.after(LEVEL_UP_DELAY_MS, lambda: self._say_level_up(persona, level))
-            return
-        self.talk(*level_up_line(persona, level))
-
-    def show_closeness(self) -> None:
-        pid = self.persona.id
-        index, name = self.affection.level(pid)
-        nxt = self.affection.next_threshold(pid)
-        rest = f" · 다음 단계까지 {nxt - self.affection.points(pid)}점" if nxt is not None else " · 최고 단계예요!"
-        self.say(f"{self.persona.name}와의 사이: {name} {self.affection.hearts(pid)}{rest}", "shy" if index else "neutral")
-
-    def tell_fortune(self) -> None:
-        self.talk(f"오늘의 운세예요!\n{fortune_text(today_fortune(datetime.now().date(), self.persona.id))}", "happy")
-
-    # ----- opt-in PC watching (file names in Downloads; copied text, never stored) ---
-
-    def _downloads_loop(self) -> None:
-        try:
-            self._downloads_step()
-        finally:
-            self.after(DOWNLOADS_POLL_MS, self._downloads_loop)
-
-    def _downloads_step(self) -> None:
-        if not self.settings.downloads_watch or not self._optional_ok():
-            return
-        folder = resolve_folder("다운로드")
-        if folder is None:
-            return
-        options = rename_options(self.settings)
-        named = rule_pattern(options.rule) if options.skip_named else None
-        waiting = count_waiting(folder, options.extensions, named)
-        now = datetime.now()
-        self.downloads_nudge.threshold = self.settings.downloads_threshold
-        if self.settings.last_downloads_nudge == now.date().isoformat() or not self.downloads_nudge.due(now, waiting):
-            return
-        self.downloads_nudge.mark(now)
-        self._update_settings(last_downloads_nudge=now.date().isoformat())
-        result = self.toolbox.execute("rename_files", {"folder": "다운로드", "request": ""})
-        self.talk(downloads_line(waiting, bool(result.get("ok"))), "thinking")
-        self._show_tool_cards()
-
-    def _clipboard_loop(self) -> None:
-        try:
-            self._clipboard_step()
-        finally:
-            self.after(CLIPBOARD_POLL_MS, self._clipboard_loop)
-
-    def _clipboard_step(self) -> None:
-        if not self.settings.clipboard_watch:
-            return
-        try:
-            text = self.clipboard_get()
-        except tk.TclError:
-            return  # empty clipboard or not text
-        digest = hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()  # only a fingerprint is kept
-        if digest == self._last_clip:
-            return
-        now = time.monotonic()
-        if not self._optional_ok() or now - self._last_clip_offer < CLIPBOARD_GAP_S:
-            return  # looked at again on a later poll
-        self._last_clip = digest
-        found = suggest(text, datetime.now())
-        del text
-        if found is None or (found.kind == "event" and found.when_text in DAY_WORDS_ONLY):
-            return  # "오늘 날씨 좋다" is not an appointment
-        self._last_clip_offer = now
-        if found.kind == "price":
-            result = self.toolbox.execute("add_price_watch", {"url": found.url})
-        else:
-            result = self.toolbox.execute("add_event", {"title": found.title, "when": found.when_text})
-        if result.get("ok"):
-            self.say(clipboard_line(found.kind, found.title, found.when_text), "thinking")
-            self._show_tool_cards()
-
-    def _show_tool_cards(self) -> None:
-        """Show confirm cards for actions a tool queued outside a chat turn (Downloads, clipboard)."""
-
-        actions = self.toolbox.take_pending()
-        if actions:
-            self.pending_actions = list(actions)
-            self._show_next_card()
-
-    # ----- presence (Windows: time since the last input only) -----------------------
-
-    def _presence_loop(self) -> None:
-        try:
-            self._presence_step()
-        finally:
-            self.after(PRESENCE_POLL_MS, self._presence_loop)
-
-    def _presence_step(self) -> None:
-        if not self.settings.presence_enabled:
-            return
-        idle = idle_seconds()
-        if idle is None:
-            return
-        now = datetime.now()
-        focusing = self.focus_timer.state(now).phase == "focus"
-        quiet = not self._optional_ok() or focusing
-        for index, (kind, minutes) in enumerate(self.presence.update(now, idle, quiet)):
-            if kind == "welcome_back" and not self.settings.notify_welcome:
-                continue
-            line = presence_line(self.persona, kind, minutes)
-            self.after(index * SECOND_LINE_GAP_MS, lambda line=line: self.talk(*line))
-
-    # ----- focus timer --------------------------------------------------------------
-
-    def start_focus(self, focus_minutes: int = 25, break_minutes: int = 5, cycles: int = 1) -> None:
-        self.focus_timer.start(datetime.now(), focus_minutes, break_minutes, cycles)
-        times = f" × {cycles}번" if cycles > 1 else ""
-        self.talk(f"{focus_minutes}분 집중{times} 시작! 끝나면 알려 줄게요.", "happy")
-        self._draw_timer()
-
-    def _tick_timer(self) -> None:
-        try:
-            self._timer_step()
-        finally:
-            self.after(TIMER_TICK_MS, self._tick_timer)
-
-    def _timer_step(self) -> None:
-        now = datetime.now()
-        events = self.focus_timer.tick(now)
-        for minutes in self.focus_timer.take_finished():
-            self.focus_log.add(now, minutes)
-            if minutes >= MIN_FOCUS_FOR_POINTS:
-                self.gain("focus_done")
-        for event in events:
-            self.talk(*timer_line(self.persona, self.focus_timer, event))
-            self.bell()
-        self._draw_timer()
-
-    def _draw_timer(self) -> None:
-        draw_timer_badge(self.canvas, self.focus_timer.state(datetime.now()), self.head_top, self._stop_timer)
-
-    def _stop_timer(self) -> None:
-        if self.focus_timer.stop():
-            self._draw_timer()
-            self.talk("타이머를 멈췄어요.", "neutral")
-
-    # ----- voice ----------------------------------------------------------------------
-
-    def talk(self, text: str, expression: str | None = None) -> None:
-        """Say a line in the bubble and, when voice is on, out loud."""
-
-        self.say(text, expression)
-        self.speak(text)
-
-    def speak(self, text: str, japanese: str = "") -> None:
-        if not self._voice_on() or not (text.strip() or japanese.strip()):
-            return
-        self.voice.speak(self._voice_id(), japanese=japanese, korean="" if japanese else text)
-
-    def _voice_id(self) -> int:
-        return self.settings.voice_ids.get(self.persona.id, self.persona.voice_id)
-
-    def _to_japanese(self, text: str) -> str:
-        key = f"{self.persona.id}:{text}"
-        if key not in self._ja_cache:
-            self._ja_cache[key] = self.companion.to_japanese(text)
-        return self._ja_cache[key]
-
-    def open_voice_settings(self) -> None:
-        def preview(url: str, voice_id: int) -> None:
-            speaker = VoiceSpeaker(
-                client=lambda: VoicevoxClient(url), translate=self._to_japanese,
-                on_start=lambda: self.events.put(("voice", True)), on_end=lambda: self.events.put(("voice", False)),
-                on_error=lambda message: self.events.put(("notice", message, "sad")),
-            )
-            line = random.choice(self.persona.greetings)
-            self.say(line, "happy")
-            speaker.speak(voice_id, korean=line)
-
-        def save(**changes: object) -> None:
-            self._voice_error_shown = False
-            self._update_settings(**changes)
-            if self.settings.voice_enabled and self.settings.light_mode:
-                self.say("가벼운 모드라 지금은 목소리를 내지 않아요. AI 설정에서 끌 수 있어요.", "neutral")
-
-        VoiceSettingsWindow(self, self.settings, self.persona, save, preview)
-
-    # ----- price watch --------------------------------------------------------------
-
-    def _price_loop(self) -> None:
-        try:
-            self.check_prices_now()
-        finally:
-            self.after(max(self.settings.price_check_minutes, MIN_PRICE_CHECK_MINUTES) * 60_000, self._price_loop)
-
-    def check_prices_now(self) -> None:
-        """Check every watch on a worker thread; results come back through the event queue."""
-
-        if self._price_checking or not self.watches.all():
-            return
-        self._price_checking = True
-
-        def work() -> None:
-            results = []
-            try:
-                for watch in self.watches.all():
-                    results.append(self.price_checker.check(watch))
-            finally:
-                self.events.put(("prices", results))
-
-        threading.Thread(target=work, daemon=True).start()
-
-    def _show_price_results(self, results: list[CheckResult]) -> None:
-        self._price_checking = False
-        alerts = [result for result in results if result.alert and result.offer]
-        for index, result in enumerate(alerts):
-            self.after(index * PRICE_ALERT_GAP_MS, lambda result=result: self._announce_price(result))
-
-    def _announce_price(self, result: CheckResult) -> None:
-        line = price_alert_line(self.persona, result)
-        self.say(f"{line}\n(말풍선을 누르면 상품 페이지가 열려요)", "surprised")
-        self.speak(line)
-        self.bubble.link = result.offer.link
-        self.bell()
-
-    def open_price_window(self) -> None:
-        PriceWindow(self, self.watches, self.check_prices_now, lambda: bool(self._price_sources()))
-
-    def open_ai_settings(self) -> None:
-        def save(**changes: object) -> None:
-            self._update_settings(**changes)
-            threading.Thread(target=self._check_model, daemon=True).start()
-
-        AISettingsWindow(self, self.settings, lambda: OllamaClient(self.settings.ollama_url).list_models(), save)
-
-    def open_focus_dialog(self) -> None:
-        running = self.focus_timer.state(datetime.now()).phase is not None
-        FocusDialog(self, running, self.start_focus, self._stop_timer)
-
-    def open_routine_settings(self) -> None:
-        def save(**changes: object) -> None:
-            self._update_settings(**changes)
-            self.presence.configure(self.settings.away_minutes, self.settings.break_reminder_minutes,
-                                    self.settings.water_reminder_minutes)
-            self.chatter.set_level(self.settings.chatter)
-
-        RoutineSettingsWindow(self, self.settings, save)
-
-    def open_price_settings(self) -> None:
-        def save(**changes: object) -> None:
-            self._update_settings(**changes)
-            self.check_prices_now()
-
-        PriceSettingsWindow(self, self.settings, save)
-
-    # ----- menu actions -----------------------------------------------------------
-
-    def open_picker(self, startup: bool = False) -> None:
-        if self.busy:
-            return
-
-        def thumbnail(persona, box):
-            path = self.art.image_path("neutral", persona.id, full=False)
-            return self.art.load(path, box) if path else None
-
-        def picked(persona_id: str, remember: bool) -> None:
-            if startup:
-                self._reveal()  # first, so a later error cannot leave the app invisible
-            self._update_settings(pick_on_start=not remember)
-            if startup or persona_id != self.persona.id:
-                self.switch_persona(persona_id)
-            if startup:
-                self.after(BRIEFING_DELAY_MS, self.brief_today)
-                for index, (message, expression) in enumerate(self._held_notices):
-                    self.after(HELD_NOTICE_DELAY_MS + index * HELD_NOTICE_GAP_MS, lambda m=message, e=expression: self.say(m, e))
-                self._held_notices.clear()
-
-        try:
-            CharacterPicker(self, PERSONAS.values(), self.persona.id, thumbnail, picked, remember=not self.settings.pick_on_start)
-        except Exception:  # noqa: BLE001 - start with the last character instead of staying hidden
-            self.report_callback_exception(*sys.exc_info())
-            if startup:
-                picked(self.persona.id, not self.settings.pick_on_start)
-
-    def switch_persona(self, persona_id: str) -> None:
-        if self.busy:
-            return
-        self._update_settings(persona_id=persona_id)
-        self.chat.set_hint(self._idle_hint())
-        self.expression = "neutral"
-        self._render_character()
-        self.talk(random.choice(self.persona.greetings), "happy")
-
-    def ask_user_name(self) -> None:
-        name = simpledialog.askstring("내 이름", "캐릭터가 알고 있을 이름을 입력하세요.", initialvalue=self.settings.user_name, parent=self)
-        if name is not None:
-            self._update_settings(user_name=name.strip())
-            self.say("이름, 기억해 둘게요." if name.strip() else "알겠어요.", "happy")
-
-    def ask_model(self) -> None:
-        try:
-            installed = OllamaClient(self.settings.ollama_url, timeout=5).list_models()
-        except Exception:  # noqa: BLE001 - the list is only a hint
-            installed = []
-        hint = ", ".join(installed) if installed else "(설치된 모델을 확인하지 못했습니다)"
-        model = simpledialog.askstring(
-            "AI 모델",
-            f"사용할 Ollama 모델 이름\n설치됨: {hint}",
-            initialvalue=self.settings.model,
-            parent=self,
-        )
-        if model and model.strip():
-            self._update_settings(model=model.strip())
-            threading.Thread(target=self._check_model, daemon=True).start()
-
-    def show_log(self) -> None:
-        persona_id = self.persona.id
-        ConversationLogWindow(self, self.store, self.persona, lambda size, bg: self.art.face(persona_id, size, bg))
-
-    def clear_memory(self) -> None:
-        if messagebox.askyesno("기억 지우기", f"{self.persona.name}와의 대화 기록을 모두 지울까요?", parent=self):
-            self.store.clear(self.persona.id)
-            self.say("...처음 뵙겠습니다?", "surprised")
 
     def destroy(self) -> None:
         # Cancel animation/polling timers so none fires into a destroyed interpreter.
@@ -1262,4 +565,3 @@ class MascotApp(tk.Tk):
 
 def run_mascot(with_windows: bool = False) -> None:
     MascotApp(with_windows=with_windows).mainloop()
-
