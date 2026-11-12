@@ -5,6 +5,7 @@ honour that take only the file names from here and join them onto their own fold
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 APP_DIR = Path.home() / ".nuri-assistant"
@@ -15,6 +16,10 @@ PROFILES_PATH = APP_DIR / "profiles.json"
 ERROR_LOG = APP_DIR / "error.log"
 USER_CHARACTERS = APP_DIR / "characters"  # personal art, preferred over the bundled frames
 
-ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets" / "characters"
+# Built exe (PyInstaller, tools/build_exe.py): the art is unpacked next to the program, not in a repo.
+FROZEN = bool(getattr(sys, "frozen", False))
+_BUNDLE = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)) if FROZEN else Path(__file__).resolve().parents[2]
+ASSETS_DIR = _BUNDLE / "assets" / "characters"
 FONTS_DIR = ASSETS_DIR.parent / "fonts"  # bundled UI font (NanumSquareRound, OFL)
-LAUNCHER = Path(__file__).resolve().parents[1] / "run_nuri.py"  # src/run_nuri.py, what "start with Windows" runs
+# What "start with Windows" runs: src/run_nuri.py, or the exe itself when built.
+LAUNCHER = Path(sys.executable) if FROZEN else Path(__file__).resolve().parents[1] / "run_nuri.py"

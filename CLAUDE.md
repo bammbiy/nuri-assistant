@@ -30,8 +30,9 @@ python src/run_nuri.py --autostart  # 윈도우 시작 때 쓰는 실행(비서 
 python -m nuri_assistant [--classic]   # 같은 실행 (src/ 안에서, 또는 pip install -e . 뒤 어디서나. 설치하면 nuri-assistant 명령도 생김)
 pip install -e .[dev]             # 선택: 개발용 설치(pyflakes). 그림이 assets/에 있어서 편집 설치(-e)만 지원
 python -m unittest discover -s tests                         # 저장소 루트에서 (테스트는 src.nuri_assistant 로 import)
-python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 245개, tkinter·화면이 없으면 UI 스모크 3개는 건너뜀)
+python -W error::ResourceWarning -m unittest discover -s tests   # SQLite 연결 누수까지 잡기 (현재 249개, tkinter·화면이 없으면 UI 스모크 3개는 건너뜀)
 python -m pyflakes src tests tools
+python tools/build_exe.py         # Windows 실행 파일 묶음(dist/NuriAssistant/, pyinstaller 필요). 빌드 뒤 --selfcheck로 켜지는지 확인
 pip install -r tools/requirements-frames.txt                 # 프레임 생성 도구용 (앱에는 필요 없음)
 python tools/build_frames.py nuri|sera|yuki|akane|shizuku|hinata|sakura|reika [출력폴더]   # 캐릭터 프레임 재생성
 ```
@@ -39,7 +40,7 @@ python tools/build_frames.py nuri|sera|yuki|akane|shizuku|hinata|sakura|reika [�
 - Python 3.10 이상(3.11 권장). 앱 실행에 외부 패키지는 필요 없습니다. Pillow는 선택(있으면 썸네일 축소가 부드러움).
 - 외부 프로그램: Ollama(기본 모델 `qwen3:8b`, 도구 호출 지원 필요), VOICEVOX(음성, 선택).
 - 단위 테스트는 tkinter 없이 돌아가고 `ui/`를 import하지 않습니다. UI는 `tests/test_ui_smoke.py`가 앱을 임시 폴더로 띄워 메뉴의 창을 모두 열어 봅니다(tkinter와 화면이 있을 때만, 없으면 건너뜀). 컨테이너에서는 `xvfb-run -a /usr/bin/python3.12 -m unittest tests.test_ui_smoke`(tkinter가 없으면 `apt-get update && apt-get install -y python3-tk`). 메뉴 항목을 추가하면 이 테스트의 목록에도 넣습니다. UI 파일을 옮기거나 import를 고치면 이 테스트를 돌립니다.
-- 푸시하면 GitHub Actions(`.github/workflows/tests.yml`)가 리눅스(3.10·3.12, xvfb)와 Windows(3.12)에서 pyflakes와 전체 테스트를 돌립니다. 푸시 뒤 결과를 확인합니다.
+- 푸시하면 GitHub Actions(`.github/workflows/tests.yml`)가 리눅스(3.10·3.12, xvfb)와 Windows(3.12)에서 pyflakes와 전체 테스트를 돌리고, Windows exe 묶음도 빌드해 켜지는지 확인한 뒤 Artifacts(`NuriAssistant-windows`)에 올립니다. `v`로 시작하는 태그를 푸시하면 릴리스에도 올라갑니다(태그는 사용자가 요청할 때만). 푸시 뒤 결과를 확인합니다.
 - 패키지 정보는 `pyproject.toml`(버전은 `nuri_assistant.__version__`과 같이 올림), 편집기 설정은 `.editorconfig`(`start_nuri.bat`은 일부러 cp949 + CRLF).
 - UI 확인 방법(클라우드 컨테이너): tkinter가 있는 `python3.12`로 `xvfb-run -a -s "-screen 0 1280x1000x24" python3.12 스크립트.py`를 실행하고, `import -window root -crop WxH+X+Y`로 캡처합니다. 가짜 Ollama·네이버·VOICEVOX 서버는 `http.server`로 만들어 `ollama_url`, `NaverShopping.URL`, `voice_url`을 그쪽으로 돌립니다. `MascotApp(app_dir)`에 임시 폴더를 넘기면 사용자 데이터를 건드리지 않습니다.
 - 컨테이너에서 확인할 수 없는 것: Windows 투명 배경(`-transparentcolor`), Windows에서 번들 글꼴 등록(`AddFontResourceEx`), 테두리 없는 창의 포커스, 고배율(125%/150%) 화면, 실제 Ollama·VOICEVOX·네이버 API. 이것들은 아직 실사용 확인 전입니다.

@@ -261,6 +261,8 @@ class MascotApp(WindowMixin, RoutineMixin, WatchMixin, TimerMixin, VoiceMixin, P
         self.full_var = tk.BooleanVar(value=self.full_mode)
         self.menu.add_checkbutton(label="전신으로 보기", variable=self.full_var,
                                   command=lambda: self.set_display_mode("full" if self.full_var.get() else "bust"))
+        self.sharp_var = tk.BooleanVar(value=self.settings.sharp_display)
+        self.menu.add_checkbutton(label="선명하게 보기 (고배율 화면)", variable=self.sharp_var, command=self.toggle_sharp)
         self.menu.add_command(label="내 이름 설정", command=self.ask_user_name)
         self.menu.add_command(label="AI 설정…", command=self.open_ai_settings)
         self.menu.add_separator()
@@ -561,6 +563,20 @@ class MascotApp(WindowMixin, RoutineMixin, WatchMixin, TimerMixin, VoiceMixin, P
     def quit_app(self) -> None:
         self._update_settings(x=self.winfo_x(), y=self.winfo_y())
         self.destroy()
+
+
+def selfcheck() -> None:
+    """Build check: the character window comes up with its art, in a temp folder. Raises if not."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        app = MascotApp(Path(tmp), with_windows=True)
+        try:
+            app.update()
+            if not app.art.image_path("neutral", app.persona.id, full=False):
+                raise RuntimeError(f"캐릭터 그림을 찾지 못했습니다: {ASSETS_DIR}")
+        finally:
+            app.destroy()
 
 
 def run_mascot(with_windows: bool = False) -> None:

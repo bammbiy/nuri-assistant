@@ -4,6 +4,7 @@ import sys
 import tkinter as tk
 import tkinter.font as tkfont
 
+from .. import dpi
 from ..paths import FONTS_DIR
 
 BUNDLED_FONT = "NanumSquareRound"  # rounded gothic shipped in assets/fonts (OFL 1.1)
@@ -35,6 +36,8 @@ FONT = BUNDLED_FONT if _register_bundled_font() else ("Malgun Gothic" if sys.pla
 
 def apply_default_fonts(root: tk.Misc) -> None:
     """Point Tk's named fonts at FONT so menus, dialogs and ttk widgets match the canvas text."""
+
+    dpi.pin_scaling(root)  # sharp display: before any font size is turned into pixels
 
     for name in ("TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont", "TkCaptionFont", "TkSmallCaptionFont", "TkTooltipFont"):
         try:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from src.nuri_assistant import autostart, paths
 
@@ -51,6 +52,15 @@ class FakeReg:
 class AutostartTest(unittest.TestCase):
     def test_launcher_exists(self) -> None:
         self.assertTrue(paths.LAUNCHER.exists())
+
+    def test_built_exe_runs_itself(self) -> None:
+        reg = FakeReg()
+        with mock.patch.object(paths, "FROZEN", True), mock.patch.object(paths, "LAUNCHER", Path("C:/Nuri/NuriAssistant.exe")):
+            autostart.set_enabled(True, reg=reg)
+        command = reg.values[(autostart.RUN_KEY, autostart.VALUE_NAME)]
+        self.assertEqual(command, autostart.exe_command(Path("C:/Nuri/NuriAssistant.exe")))
+        self.assertTrue(command.endswith('NuriAssistant.exe" --autostart'))
+        self.assertNotIn("run_nuri.py", command)
 
     def test_enable_disable(self) -> None:
         reg = FakeReg()

@@ -34,6 +34,7 @@ src/nuri_assistant/
 ├── services.py  캐릭터 앱의 저장소·가격 확인기·타이머·ToolBox 조립 (Tk 없이 만들 수 있음)
 ├── announcements.py  AI를 거치지 않는 대사 조립: 일정 알림·잔소리·아침 브리핑(+날씨)·타이머·가격 알림·자리 비움/건강·하루 정리·정각·명절
 ├── routine.py   시각 해석(parse_clock), 하루 한 번 시점(daily_due), 정각 알림 시점(hourly_key), "1시간 20분" 표기
+├── dpi.py       선명하게 보기: DPI 인식 선언과 Tk 배율 고정 (켰을 때만)
 ├── autostart.py 윈도우 시작 때 켜기: HKCU\…\Run의 값 하나(NuriAssistant)만 쓰고 지움, pythonw로 --autostart
 ├── crashlog.py  error.log 기록과 시작 실패 안내창
 ├── screen.py    창 위치 계산: 작업 영역(작업 표시줄 제외)·모든 모니터 영역, 오른쪽 아래 기본 위치
@@ -94,6 +95,8 @@ docs/                          RULES.md(이 문서), TODO.md(남은 일)
 - 첫 실행 개인정보 안내: `privacy_shown`이 거짓이면 비서를 고른 뒤 2.5초에 `PrivacyWindow`, 닫으면 참. 메뉴에서 다시 열 수 있음. 밖으로 나가는 것을 새로 추가하면 이 창 문구도 고칩니다.
 - 정각 알림(`hourly_chime`, 기본 꺼짐): 8~23시 정각부터 3분 안(`CHIME_WINDOW_MIN`)에 `_routine_step`이 한 번(`last_chime` = "YYYY-MM-DDTHH"), 브리핑·하루 정리·기념일 뒤 1분이 지나야. 바쁘거나 전체 화면·집중 타이머 중이면 그 시각은 건너뜀. 명절·계절 첫날은 기념일과 같은 자리(`last_occasion`, `notify_occasion`)에서 생일·N일이 없는 날에만. 설날·추석은 `fun/seasons.py` 표가 2030년까지라 그 뒤는 표를 늘려야 함.
 - 가벼운 모드(`light_mode`, AI 설정): 음성 끔(`_voice_on()`이 거짓, 시스템 프롬프트에도 `<ja>` 요청 안 함), 깜박임 간격 2배(`LIGHT_SLOWDOWN`), 대기 표정 바꾸기 없음, 모델에 보내는 지난 대화 최대 10개(`LIGHT_HISTORY`). `num_ctx`는 줄이지 않음(시스템 프롬프트+도구 설명이 2048을 넘어 앞이 잘림). 작은 모델(`qwen3:4b`)은 권유만 하고 자동으로 바꾸지 않음.
+- 선명하게 보기(`dpi.py`, 메뉴 체크 `sharp_display`, 기본 꺼짐): 켜면 `app.main()`이 첫 창을 만들기 전에 `SetProcessDpiAwareness(1)`을 부르고, `theme.apply_default_fonts`가 Tk 배율을 96dpi로 고정합니다(글꼴이 픽셀 레이아웃과 어긋나지 않게). 125%·150% 화면에서 Windows가 창을 늘리지 않아 또렷하지만 그만큼 작게 보입니다. 다음 실행부터 적용. 그림과 레이아웃을 배율만큼 키우는 방식은 모든 창의 픽셀 좌표를 바꿔야 해서 하지 않았습니다.
+- exe 묶음(`tools/build_exe.py`, PyInstaller 폴더 방식): `paths.FROZEN`이면 그림·글꼴은 `sys._MEIPASS/assets`에서 찾고, 시작 프로그램 등록은 exe 자신(`"…\NuriAssistant.exe" --autostart`). 원본 시트(`reference_*`)는 묶지 않습니다. `--selfcheck`는 임시 폴더로 캐릭터 창을 띄웠다 닫고 종료 코드 0/1(안내창 없음)이라 빌드 확인에만 씁니다. 새 데이터 폴더를 `assets/` 밖에 만들면 빌드 스크립트에도 넣어야 합니다.
 - 윈도우 시작 때 켜기(`autostart.py`, 메뉴 체크): 설정 파일이 아니라 레지스트리 값이 진실. 켜면 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`에 `NuriAssistant` = `"pythonw.exe" "…\src\run_nuri.py" --autostart`, 끄면 그 값만 지움. 기본 꺼짐, Windows 아니면 메뉴가 회색. `--autostart`로 켜지면 비서 선택 화면 없이 마지막 캐릭터로 시작하고, 첫 인사는 말풍선만(로그인 직후엔 VOICEVOX가 아직 안 떠 있음). 저장소 폴더를 옮기면 다시 켜야 함.
 - `_update_settings`는 `last_*` 키만 바꿀 때 `Companion`을 다시 만들지 않습니다(매시간 정각 기록 때문에 도구 미지원 판정 등이 날아가지 않게).
 - 설정 항목을 추가할 때는 `CompanionSettings`에 기본값과 함께 넣습니다. 알 수 없는 키는 로드 시 무시되므로 옛 설정 파일도 열립니다.

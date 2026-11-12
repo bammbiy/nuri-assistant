@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 
+from src.nuri_assistant import dpi
 from src.nuri_assistant.screen import Rect, all_monitors, default_position, is_reachable, work_area
 
 
@@ -37,6 +40,38 @@ class ScreenTest(unittest.TestCase):
         if sys.platform != "win32":
             self.assertEqual(work_area(1280, 1000), Rect(0, 0, 1280, 1000))
             self.assertEqual(all_monitors(1280, 1000), Rect(0, 0, 1280, 1000))
+
+
+class DpiTest(unittest.TestCase):
+    def setUp(self) -> None:
+        patcher = mock.patch.object(dpi, "_sharp", False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_off_until_enabled(self) -> None:
+        root = mock.Mock()
+        dpi.pin_scaling(root)
+        self.assertFalse(dpi.active())
+        root.tk.call.assert_not_called()
+
+    def test_enable_pins_tk_to_96_dpi(self) -> None:
+        calls = []
+        windll = SimpleNamespace(shcore=SimpleNamespace(SetProcessDpiAwareness=calls.append))
+        self.assertTrue(dpi.enable(windll))
+        self.assertEqual(calls, [1])
+        root = mock.Mock()
+        dpi.pin_scaling(root)
+        root.tk.call.assert_called_once_with("tk", "scaling", 96 / 72)
+
+    def test_old_windows_falls_back(self) -> None:
+        def refuse(_level):
+            raise OSError("access denied")
+
+        windll = SimpleNamespace(shcore=SimpleNamespace(SetProcessDpiAwareness=refuse),
+                                 user32=SimpleNamespace(SetProcessDPIAware=lambda: 1))
+        self.assertTrue(dpi.enable(windll))
+        self.assertFalse(dpi.enable(SimpleNamespace()))  # neither call exists
+        self.assertFalse(dpi.active())
 
 
 if __name__ == "__main__":

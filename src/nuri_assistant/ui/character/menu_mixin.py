@@ -89,6 +89,14 @@ class MenuMixin:
         self._render_character()
         self.talk(random.choice(self.persona.greetings), "happy")
 
+    def toggle_sharp(self) -> None:
+        on = bool(self.sharp_var.get())
+        self._update_settings(sharp_display=on)
+        if on:
+            self.say("다음에 켤 때부터 선명하게 보여요. 화면 배율이 125%·150%면 그림이 또렷해지는 대신 조금 작아져요.")
+        else:
+            self.say("다음에 켤 때부터 예전처럼 보여요.")
+
     def ask_user_name(self) -> None:
         name = simpledialog.askstring("내 이름", "캐릭터가 알고 있을 이름을 입력하세요.", initialvalue=self.settings.user_name, parent=self)
         if name is not None:

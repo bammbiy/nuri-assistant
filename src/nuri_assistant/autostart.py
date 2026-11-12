@@ -22,6 +22,11 @@ def launch_command(python: Path, script: Path) -> str:
     return f'"{exe}" "{script}" --autostart'
 
 
+def exe_command(exe: Path) -> str:
+    """The command line when the app is a built exe: no Python, no script."""
+    return f'"{exe}" --autostart'
+
+
 def _winreg(reg):
     if reg is not None:
         return reg
@@ -45,7 +50,10 @@ def set_enabled(on: bool, python: Path | None = None, script: Path | None = None
 
     reg = _winreg(reg)
     if on:
-        command = launch_command(python or Path(sys.executable), script or paths.LAUNCHER)
+        if paths.FROZEN and python is None and script is None:
+            command = exe_command(paths.LAUNCHER)
+        else:
+            command = launch_command(python or Path(sys.executable), script or paths.LAUNCHER)
         with reg.CreateKey(reg.HKEY_CURRENT_USER, RUN_KEY) as key:
             reg.SetValueEx(key, VALUE_NAME, 0, reg.REG_SZ, command)
         return

@@ -10,6 +10,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Nuri Assistant")
     parser.add_argument("--classic", action="store_true", help="캐릭터 없이 파일 정리 도구만 실행합니다.")
     parser.add_argument("--autostart", action="store_true", help=argparse.SUPPRESS)  # started with Windows (Run key)
+    # Build check (tools/build_exe.py, CI): start the character in a temp folder, close, exit 0 or 1 without dialogs.
+    parser.add_argument("--selfcheck", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     try:
         import tkinter  # checked first: some Python installs ship without it
@@ -24,6 +26,17 @@ def main() -> None:
     # The UI is imported only here, after the tkinter check, so a broken import still ends up
     # in error.log and an error box instead of a console that closes at once.
     try:
+        from . import dpi
+        from .companion.settings import load_settings
+        from .paths import SETTINGS_PATH
+
+        if load_settings(SETTINGS_PATH).sharp_display:
+            dpi.enable()  # before the first window
+        if args.selfcheck:
+            from .ui.character.mascot import selfcheck
+
+            selfcheck()
+            return
         if args.classic:
             from .ui.classic.desktop import run
 
@@ -34,6 +47,8 @@ def main() -> None:
             run_mascot(with_windows=args.autostart)
     except Exception:
         path = log_exception(*sys.exc_info())
+        if args.selfcheck:
+            sys.exit(1)
         where = f"\n\n자세한 내용: {path}" if path else ""
         show_error("Nuri Assistant 실행 오류", f"앱을 시작하지 못했습니다.\n{sys.exc_info()[1]!r}{where}")
         sys.exit(1)

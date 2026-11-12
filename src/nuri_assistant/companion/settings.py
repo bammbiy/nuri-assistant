@@ -73,6 +73,7 @@ class CompanionSettings:
     hourly_chime: bool = False
     last_chime: str = ""
     light_mode: bool = False
+    sharp_display: bool = False  # DPI aware on scaled screens: crisp but smaller (dpi.py), applies at next start
     x: int | None = None
     y: int | None = None
 

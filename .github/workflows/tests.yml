@@ -41,3 +41,36 @@ jobs:
       - name: Tests (Windows)
         if: runner.os == 'Windows'
         run: python -W error::ResourceWarning -m unittest discover -s tests
+
+  exe:
+    # Windows 실행 파일 묶음(tools/build_exe.py). 빌드한 프로그램이 실제로 켜지는지(--selfcheck)까지 확인합니다.
+    # 결과는 이 실행의 Artifacts에서 받고, v로 시작하는 태그를 푸시하면 릴리스에도 올립니다.
+    name: Windows exe
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tools
+        run: python -m pip install pyinstaller pillow
+      - name: Build and self-check
+        run: python tools/build_exe.py
+      - name: Show error.log on failure
+        if: failure()
+        shell: bash
+        run: cat ~/.nuri-assistant/error.log || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NuriAssistant-windows
+          path: dist/NuriAssistant
+          retention-days: 30
+      - name: Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" dist/NuriAssistant-windows.zip --title "${GITHUB_REF_NAME}" --generate-notes
